@@ -1,0 +1,446 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Kegs Hammurabier</title>
+<style>
+  :root {
+    --ambar: #b8860b; --amber2: #8a6508; --fondo: #f6f3ee; --carta: #fff;
+    --lleno: #1e8e3e; --entregado: #1a73e8; --sucio: #b3261e; --vacio: #757575;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; font-family: system-ui, -apple-system, sans-serif; }
+  body { background: var(--fondo); color: #222; padding-bottom: 40px; }
+  header { background: var(--ambar); color: #fff; padding: 12px 14px; }
+  header h1 { font-size: 18px; }
+  nav { display: flex; background: var(--amber2); }
+  nav button { flex: 1; padding: 12px 0; border: none; background: transparent; color: #f3e5c0; font-size: 14.5px; font-weight: 600; }
+  nav button.activa { background: var(--fondo); color: var(--amber2); border-radius: 10px 10px 0 0; }
+  main { padding: 14px; max-width: 560px; margin: 0 auto; }
+  .btn-grande { width: 100%; padding: 16px; font-size: 18px; font-weight: 700; color: #fff; background: var(--ambar); border: none; border-radius: 12px; }
+  .btn-grande.rojo { background: var(--sucio); }
+  .fila { display: flex; gap: 8px; margin-top: 10px; }
+  .fila input { flex: 1; }
+  input, select, textarea { width: 100%; padding: 11px; font-size: 16px; border: 1px solid #ccc; border-radius: 8px; background: #fff; }
+  .btn { padding: 11px 16px; font-size: 15px; font-weight: 600; border: none; border-radius: 8px; background: var(--ambar); color: #fff; }
+  .btn.gris { background: #9e9e9e; } .btn.rojo { background: #b3261e; }
+  #scanBox { position: relative; width: 100%; aspect-ratio: 1/1; max-height: 60vh; background: #000; border-radius: 12px; overflow: hidden; display: none; margin-top: 12px; }
+  #scanBox video { width: 100%; height: 100%; object-fit: cover; }
+  #scanBox .marco { position: absolute; inset: 18%; border: 3px solid #fff; border-radius: 16px; box-shadow: 0 0 0 100vmax rgba(0,0,0,.35); }
+  #scanBox .cerrar { position: absolute; top: 8px; right: 8px; background: rgba(0,0,0,.6); color: #fff; border: none; border-radius: 999px; width: 38px; height: 38px; font-size: 20px; }
+  .aviso { margin-top: 10px; padding: 10px 12px; border-radius: 8px; display: none; font-size: 14px; }
+  .aviso.error { display: block; background: #fdecea; color: #b3261e; }
+  .aviso.info { display: block; background: #e8f0fe; color: #1a4fa0; }
+  .aviso.ok { display: block; background: #e6f4ea; color: #1e6e33; }
+  .carta { background: var(--carta); border-radius: 12px; padding: 14px; margin-top: 14px; box-shadow: 0 1px 4px rgba(0,0,0,.12); }
+  .carta h2 { font-size: 22px; display: flex; align-items: center; gap: 10px; }
+  .carta label { display: block; font-size: 13px; font-weight: 600; margin: 8px 0 4px; color: #555; }
+  .chip { font-size: 12px; font-weight: 700; color: #fff; padding: 3px 10px; border-radius: 999px; }
+  .chip.LLENO { background: var(--lleno); } .chip.ENTREGADO { background: var(--entregado); }
+  .chip.SUCIO { background: var(--sucio); } .chip.VACIO { background: var(--vacio); }
+  .datos { margin-top: 8px; font-size: 14.5px; line-height: 1.55; color: #444; }
+  .acciones { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 12px; }
+  .acciones button { padding: 13px 4px; font-size: 15px; font-weight: 700; border-radius: 10px; border: 2px solid #ddd; background: #fafafa; color: #555; }
+  .acciones button.sugerida { border-color: var(--ambar); background: #fff7e0; color: var(--amber2); }
+  .acciones button.bloqueada { opacity: .45; }
+  form.fAccion { margin-top: 12px; border-top: 1px solid #eee; padding-top: 12px; display: none; }
+  form.fAccion label { display: block; font-size: 13px; font-weight: 600; margin: 8px 0 4px; color: #555; }
+  .contadores { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+  .contadores button { border: 2px solid #ddd; background: #fff; border-radius: 999px; padding: 7px 13px; font-size: 13.5px; font-weight: 700; color: #555; }
+  .contadores button.activa { border-color: var(--ambar); color: var(--amber2); background: #fff7e0; }
+  .item { background: #fff; border-radius: 10px; padding: 10px 12px; margin-top: 8px; display: flex; align-items: center; gap: 10px; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+  .item .cod { font-weight: 800; font-size: 15px; min-width: 56px; }
+  .item .det { flex: 1; font-size: 13px; color: #555; line-height: 1.4; }
+  .cargando { text-align: center; color: #888; padding: 20px; display: none; }
+</style>
+</head>
+<body>
+<header><h1>🛢️ Kegs Hammurabier</h1></header>
+<nav>
+  <button id="navEsc" class="activa" onclick="verTab('esc')">Escanear</button>
+  <button id="navKegs" onclick="verTab('kegs')">Kegs</button>
+  <button id="navFerm" onclick="verTab('ferm')">Fermentadores</button>
+</nav>
+
+<main id="tabEsc">
+  <button class="btn-grande" id="btnScan" onclick="abrirCamara()">📷 Escanear en vivo</button>
+  <div id="scanBox">
+    <video id="video" playsinline muted></video>
+    <div class="marco"></div>
+    <button class="cerrar" onclick="cerrarCamara()">✕</button>
+  </div>
+  <div class="fila">
+    <input id="codManual" placeholder="o escribe el código (EV17)" autocomplete="off">
+    <button class="btn" onclick="buscarManual()">Buscar</button>
+  </div>
+  <button class="btn gris" id="btnMulti" style="width:100%;margin-top:10px" onclick="toggleEntrega()">🚚 Entrega múltiple a un cliente</button>
+  <div class="carta" id="cardEntrega" style="display:none">
+    <h2 style="font-size:17px">Entrega múltiple</h2>
+    <label>Cliente (de la base CRM)</label>
+    <input id="emCliente" list="dlClientes" autocomplete="off" placeholder="Empieza a escribir…">
+    <label>Ubicación / sucursal (opcional)</label>
+    <input id="emUbicacion" autocomplete="off">
+    <div class="fila">
+      <button class="btn" onclick="empezarEntrega()">Empezar</button>
+      <button class="btn gris" onclick="document.getElementById('cardEntrega').style.display='none'">Cancelar</button>
+    </div>
+  </div>
+  <div class="aviso info" id="banEntrega" style="display:none"></div>
+  <div class="aviso" id="msg"></div>
+  <div class="cargando" id="cargEsc">⏳ Un momento…</div>
+  <div id="card"></div>
+</main>
+
+<main id="tabKegs" style="display:none">
+  <div class="contadores" id="contadores"></div>
+  <div class="fila" style="margin-top:0">
+    <input id="filtro" placeholder="Buscar código, cliente o producto" oninput="pintarLista()" autocomplete="off">
+    <button class="btn gris" onclick="cargarResumen(true)">↻</button>
+  </div>
+  <div class="cargando" id="cargKegs">⏳ Cargando kegs…</div>
+  <div id="lista"></div>
+</main>
+
+<main id="tabFerm" style="display:none">
+  <div class="aviso" id="msgFerm"></div>
+  <div class="cargando" id="cargFerm">⏳ Un momento…</div>
+  <div id="listaFerm"></div>
+  <div class="carta">
+    <h2 style="font-size:17px">Registrar fermentador</h2>
+    <label>Fermentador</label><select id="ffTanque"></select>
+    <label>Producto</label><select id="ffProducto"><option value="">— elegir —</option></select>
+    <label>Lote</label><input id="ffLote" placeholder="L2614101" autocomplete="off">
+    <label>Notas (opcional)</label><input id="ffNotas" autocomplete="off">
+    <div class="fila"><button class="btn" onclick="fermGuardar()">Registrar</button></div>
+  </div>
+</main>
+
+<canvas id="cv" style="display:none"></canvas>
+<datalist id="dlClientes"></datalist>
+
+<script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
+<script>
+// ====== CONFIG: pega aquí la URL /exec de tu Web App ======
+var API = 'https://script.google.com/macros/s/AKfycbznp6ECYaCj3UOo0MwJAGuuVSGFhn4nC4y25_wvFUJ7NlDPhccawZM4bJO_fkfzKQUjEw/exec';
+
+var DATOS = { clientes: [], productosCat: [], tanques: [], fermentadores: [] };
+var KEG = null, RESUMEN = null, FILTRO_ESTADO = '';
+var SUGERIDA = { VACIO: 'LLENAR', LLENO: 'ENTREGAR', ENTREGADO: 'RECOGER', SUCIO: 'LAVAR' };
+var NOMBRE_ACCION = { LLENAR: 'Llenar', ENTREGAR: 'Entregar', RECOGER: 'Recoger', LAVAR: 'Lavar' };
+
+// ---------- API (fetch al Apps Script) ----------
+function api(fn, datos) {
+  var url = API + '?api=' + encodeURIComponent(fn);
+  if (datos) url += '&datos=' + encodeURIComponent(JSON.stringify(datos));
+  return fetch(url).then(function(r) { return r.json(); });
+}
+
+// ---------- arranque ----------
+api('kegDatos').then(function(r) {
+  if (r && r.ok) {
+    DATOS = r;
+    var dl = document.getElementById('dlClientes');
+    r.clientes.forEach(function(c) { var o = document.createElement('option'); o.value = c; dl.appendChild(o); });
+    pintarFerm();
+  }
+});
+document.getElementById('codManual').addEventListener('keydown', function(ev) {
+  if (ev.key === 'Enter') { ev.preventDefault(); buscarManual(); }
+});
+// enlace directo ?codigo=EVxx
+(function() {
+  var m = location.search.match(/[?&]codigo=([A-Za-z0-9-]+)/i);
+  if (m) buscar(m[1]);
+})();
+
+function verTab(t) {
+  document.getElementById('tabEsc').style.display = (t === 'esc') ? '' : 'none';
+  document.getElementById('tabKegs').style.display = (t === 'kegs') ? '' : 'none';
+  document.getElementById('tabFerm').style.display = (t === 'ferm') ? '' : 'none';
+  document.getElementById('navEsc').classList.toggle('activa', t === 'esc');
+  document.getElementById('navKegs').classList.toggle('activa', t === 'kegs');
+  document.getElementById('navFerm').classList.toggle('activa', t === 'ferm');
+  if (t !== 'esc') cerrarCamara();
+  if (t === 'kegs' && !RESUMEN) cargarResumen(false);
+  if (t === 'ferm') pintarFerm();
+}
+
+function msg(tipo, texto) { avisar_('msg', tipo, texto); }
+function msgFerm(tipo, texto) { avisar_('msgFerm', tipo, texto); }
+function avisar_(id, tipo, texto) {
+  var m = document.getElementById(id);
+  m.className = 'aviso ' + (tipo || '');
+  m.textContent = texto || '';
+  m.style.display = tipo ? 'block' : 'none';
+}
+function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function(c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+
+// ========== ESCÁNER EN VIVO ==========
+var stream = null, scanRAF = null, detector = null, escaneando = false;
+
+async function abrirCamara() {
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    msg('error', 'Tu navegador no permite cámara. Escribe el código a mano.'); return;
+  }
+  document.getElementById('scanBox').style.display = 'block';
+  document.getElementById('btnScan').style.display = 'none';
+  msg('info', 'Apunta la cámara al QR del barril…');
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' } }, audio: false });
+  } catch (e) {
+    msg('error', 'No diste permiso de cámara o no hay cámara. Escribe el código a mano.');
+    cerrarCamara(); return;
+  }
+  var v = document.getElementById('video');
+  v.srcObject = stream;
+  await v.play();
+  if ('BarcodeDetector' in window) {
+    try {
+      var fmts = await BarcodeDetector.getSupportedFormats();
+      if (fmts.indexOf('qr_code') !== -1) detector = new BarcodeDetector({ formats: ['qr_code'] });
+    } catch (e) { detector = null; }
+  }
+  escaneando = true;
+  loopEscaneo();
+}
+
+function cerrarCamara() {
+  escaneando = false;
+  if (scanRAF) { cancelAnimationFrame(scanRAF); scanRAF = null; }
+  if (stream) { stream.getTracks().forEach(function(t) { t.stop(); }); stream = null; }
+  document.getElementById('scanBox').style.display = 'none';
+  document.getElementById('btnScan').style.display = '';
+}
+
+async function loopEscaneo() {
+  if (!escaneando) return;
+  var v = document.getElementById('video');
+  var texto = null;
+  if (v.readyState === v.HAVE_ENOUGH_DATA) {
+    if (detector) {
+      try { var res = await detector.detect(v); if (res && res.length) texto = res[0].rawValue; } catch (e) {}
+    } else if (typeof jsQR !== 'undefined') {
+      var cv = document.getElementById('cv'), cx = cv.getContext('2d', { willReadFrequently: true });
+      var w = v.videoWidth, h = v.videoHeight;
+      if (w && h) {
+        var s = Math.min(1, 1000 / Math.max(w, h));
+        cv.width = Math.round(w * s); cv.height = Math.round(h * s);
+        cx.drawImage(v, 0, 0, cv.width, cv.height);
+        try { var qr = jsQR(cx.getImageData(0, 0, cv.width, cv.height).data, cv.width, cv.height, { inversionAttempts: 'dontInvert' }); if (qr) texto = qr.data; } catch (e) {}
+      }
+    }
+  }
+  if (texto) { escaneando = false; if (navigator.vibrate) navigator.vibrate(80); cerrarCamara(); buscar(texto); return; }
+  scanRAF = requestAnimationFrame(loopEscaneo);
+}
+
+// ========== búsqueda + acciones ==========
+function buscarManual() {
+  var t = document.getElementById('codManual').value.trim();
+  if (!t) { msg('error', 'Escribe un código, por ejemplo EV17.'); return; }
+  buscar(t);
+}
+
+function buscar(texto) {
+  document.getElementById('cargEsc').style.display = 'block';
+  api('kegBuscar', { texto: texto }).then(function(r) {
+    document.getElementById('cargEsc').style.display = 'none';
+    if (!r.ok) { msg('error', r.error); return; }
+    document.getElementById('codManual').value = '';
+    if (ENTREGA) { entregaLote(r.keg); return; }
+    msg(); KEG = r.keg; pintarCarta();
+  }).catch(function(e) {
+    document.getElementById('cargEsc').style.display = 'none';
+    msg('error', 'Error de conexión: ' + e.message);
+  });
+}
+
+function pintarCarta() {
+  var k = KEG, sug = SUGERIDA[k.estado] || '';
+  var d = [];
+  d.push(k.capacidad + ' L · ' + esc(k.tipo) + ' · conector ' + esc(k.conector));
+  if (k.producto) d.push('<b>Producto:</b> ' + esc(k.producto) + (k.lote ? ' (lote ' + esc(k.lote) + ')' : ''));
+  if (k.cliente) d.push('<b>Cliente:</b> ' + esc(k.cliente) + (k.ubicacion ? ' — ' + esc(k.ubicacion) : ''));
+  if (k.ultMov) d.push('<b>Últ. movimiento:</b> ' + esc(k.ultMov));
+  var botones = ['LLENAR', 'ENTREGAR', 'RECOGER', 'LAVAR'].map(function(a) {
+    var clase = (a === sug ? 'sugerida' : '') + (a === 'LLENAR' && k.estado !== 'VACIO' ? ' bloqueada' : '');
+    return '<button class="' + clase + '" onclick="elegirAccion(\'' + a + '\')">' + NOMBRE_ACCION[a] + '</button>';
+  }).join('');
+  var opFerm = DATOS.fermentadores.map(function(f, i) {
+    return '<option value="' + i + '">' + esc(f.fermentador) + ' — ' + esc(f.producto) + ' (lote ' + esc(f.lote) + ')</option>';
+  }).join('');
+  var cuerpoLlenar = DATOS.fermentadores.length
+    ? '<label>Fermentador de origen</label><select id="fFerm"><option value="">— elegir —</option>' + opFerm + '</select>' +
+      '<label>Notas (opcional)</label><input id="fNotasL" autocomplete="off">' +
+      '<div class="fila"><button class="btn" onclick="guardar(\'LLENAR\')">Guardar llenado</button></div>'
+    : '<div class="aviso error" style="display:block">No hay fermentadores activos. Registra uno en Fermentadores.</div>';
+  document.getElementById('card').innerHTML =
+    '<div class="carta">' +
+      '<h2>' + esc(k.codigo) + ' <span class="chip ' + esc(k.estado) + '">' + esc(k.estado) + '</span></h2>' +
+      '<div class="datos">' + d.join('<br>') + '</div>' +
+      '<div class="acciones">' + botones + '</div>' +
+      '<form class="fAccion" id="fLLENAR" onsubmit="return false">' + cuerpoLlenar + '</form>' +
+      '<form class="fAccion" id="fENTREGAR" onsubmit="return false">' +
+        '<label>Cliente (de la base CRM)</label><input id="fCliente" list="dlClientes" autocomplete="off" placeholder="Empieza a escribir…">' +
+        '<label>Ubicación / sucursal (opcional)</label><input id="fUbicacion" autocomplete="off">' +
+        '<label>Notas (opcional)</label><input id="fNotasE" autocomplete="off">' +
+        '<div class="fila"><button class="btn" onclick="guardar(\'ENTREGAR\')">Guardar entrega</button></div>' +
+      '</form>' +
+      '<form class="fAccion" id="fRECOGER" onsubmit="return false">' +
+        '<label>Notas (opcional)</label><input id="fNotasR" autocomplete="off">' +
+        '<div class="fila"><button class="btn" onclick="guardar(\'RECOGER\')">Confirmar recogida (queda SUCIO)</button></div>' +
+      '</form>' +
+      '<form class="fAccion" id="fLAVAR" onsubmit="return false">' +
+        '<label>Notas (opcional)</label><input id="fNotasV" autocomplete="off">' +
+        '<div class="fila"><button class="btn" onclick="guardar(\'LAVAR\')">Confirmar lavado (queda VACÍO)</button></div>' +
+      '</form>' +
+    '</div>';
+}
+
+function elegirAccion(a) {
+  if (a === 'LLENAR' && KEG.estado !== 'VACIO') {
+    msg('error', 'El barril está ' + KEG.estado + '. Solo se llenan barriles VACÍOS' + (KEG.estado === 'SUCIO' ? ': lávalo primero.' : '.'));
+    return;
+  }
+  var sug = SUGERIDA[KEG.estado];
+  if (a !== sug && !confirm('El barril está ' + KEG.estado + '. Lo normal sería "' + NOMBRE_ACCION[sug] + '". ¿Seguro que quieres "' + NOMBRE_ACCION[a] + '"?')) return;
+  ['LLENAR', 'ENTREGAR', 'RECOGER', 'LAVAR'].forEach(function(x) {
+    document.getElementById('f' + x).style.display = (x === a) ? 'block' : 'none';
+  });
+}
+
+function guardar(a) {
+  var d = { codigo: KEG.codigo, accion: a };
+  if (a === 'LLENAR') {
+    var i = document.getElementById('fFerm') ? document.getElementById('fFerm').value : '';
+    if (i === '') { alert('Elige el fermentador de origen.'); return; }
+    var f = DATOS.fermentadores[Number(i)];
+    if (!f) { alert('Fermentador no válido.'); return; }
+    d.producto = f.producto; d.lote = f.lote;
+    d.notas = document.getElementById('fNotasL').value.trim();
+  } else if (a === 'ENTREGAR') {
+    d.cliente = document.getElementById('fCliente').value.trim();
+    d.ubicacion = document.getElementById('fUbicacion').value.trim();
+    d.notas = document.getElementById('fNotasE').value.trim();
+    if (!DATOS.clientes.some(function(c) { return c.toLowerCase() === d.cliente.toLowerCase(); })) { alert('El cliente debe existir en la base del CRM.'); return; }
+  } else if (a === 'RECOGER') { d.notas = document.getElementById('fNotasR').value.trim(); }
+  else if (a === 'LAVAR') { d.notas = document.getElementById('fNotasV').value.trim(); }
+  document.getElementById('cargEsc').style.display = 'block';
+  api('kegAccion', d).then(function(r) {
+    document.getElementById('cargEsc').style.display = 'none';
+    if (!r.ok) { msg('error', r.error); return; }
+    KEG = r.keg; RESUMEN = null; pintarCarta(); msg('ok', '✅ ' + r.mensaje);
+  }).catch(function(e) { document.getElementById('cargEsc').style.display = 'none'; msg('error', 'Error: ' + e.message); });
+}
+
+// ========== entrega múltiple ==========
+var ENTREGA = null;
+function toggleEntrega() { var c = document.getElementById('cardEntrega'); c.style.display = (c.style.display === 'none') ? '' : 'none'; }
+function empezarEntrega() {
+  var cli = document.getElementById('emCliente').value.trim();
+  var ubi = document.getElementById('emUbicacion').value.trim();
+  if (!DATOS.clientes.some(function(x) { return x.toLowerCase() === cli.toLowerCase(); })) { alert('El cliente debe existir en la base del CRM.'); return; }
+  ENTREGA = { cliente: cli, ubicacion: ubi, codigos: [] };
+  document.getElementById('cardEntrega').style.display = 'none';
+  document.getElementById('btnMulti').style.display = 'none';
+  document.getElementById('card').innerHTML = '';
+  pintarBanner(); msg('info', 'Modo entrega activo: escanea los barriles uno tras otro.');
+}
+function pintarBanner() {
+  var b = document.getElementById('banEntrega');
+  b.style.display = 'block';
+  b.innerHTML = '🚚 Entregando a <b>' + esc(ENTREGA.cliente) + '</b>' + (ENTREGA.ubicacion ? ' — ' + esc(ENTREGA.ubicacion) : '') +
+    ' · <b>' + ENTREGA.codigos.length + '</b> barril(es)<div class="fila"><button class="btn rojo" onclick="terminarEntrega()">Terminar entrega</button></div>';
+}
+function terminarEntrega() {
+  var n = ENTREGA.codigos.length;
+  msg('ok', '✅ Entrega terminada: ' + n + ' barril(es) a ' + ENTREGA.cliente + (n ? ' — ' + ENTREGA.codigos.join(', ') : '') + '.');
+  ENTREGA = null;
+  document.getElementById('banEntrega').style.display = 'none';
+  document.getElementById('btnMulti').style.display = '';
+}
+function entregaLote(keg) {
+  if (keg.estado !== 'LLENO') { msg('error', keg.codigo + ' está ' + keg.estado + ' — solo se entregan barriles LLENOS.'); return; }
+  if (ENTREGA.codigos.indexOf(keg.codigo) !== -1) { msg('error', keg.codigo + ' ya está en esta entrega.'); return; }
+  document.getElementById('cargEsc').style.display = 'block';
+  api('kegAccion', { codigo: keg.codigo, accion: 'ENTREGAR', cliente: ENTREGA.cliente, ubicacion: ENTREGA.ubicacion }).then(function(r) {
+    document.getElementById('cargEsc').style.display = 'none';
+    if (!r.ok) { msg('error', r.error); return; }
+    if (!ENTREGA) return;
+    ENTREGA.codigos.push(r.keg.codigo); RESUMEN = null; pintarBanner();
+    msg('ok', '✅ ' + r.keg.codigo + ' entregado a ' + ENTREGA.cliente + ' (' + ENTREGA.codigos.length + ')');
+  }).catch(function(e) { document.getElementById('cargEsc').style.display = 'none'; msg('error', 'Error: ' + e.message); });
+}
+
+// ========== fermentadores ==========
+function pintarFerm() {
+  var html = DATOS.fermentadores.map(function(f) {
+    return '<div class="item"><div class="cod">' + esc(f.fermentador) + '</div>' +
+      '<div class="det"><b>' + esc(f.producto) + '</b> · lote ' + esc(f.lote) + (f.fecha ? '<br>desde ' + esc(f.fecha) : '') + (f.notas ? '<br>' + esc(f.notas) : '') + '</div>' +
+      '<button class="btn rojo" onclick="fermVaciar(\'' + esc(f.fermentador) + '\',\'' + esc(f.lote) + '\')">Cerrar</button></div>';
+  }).join('');
+  document.getElementById('listaFerm').innerHTML = html || '<div class="cargando" style="display:block">No hay fermentadores activos.</div>';
+  var ocup = {}; DATOS.fermentadores.forEach(function(f) { ocup[f.fermentador.toUpperCase()] = true; });
+  document.getElementById('ffTanque').innerHTML = '<option value="">— elegir —</option>' + DATOS.tanques.map(function(t) { return ocup[t] ? '' : '<option value="' + esc(t) + '">' + esc(t) + '</option>'; }).join('');
+  document.getElementById('ffProducto').innerHTML = '<option value="">— elegir —</option>' + DATOS.productosCat.map(function(p) { return '<option value="' + esc(p) + '">' + esc(p) + '</option>'; }).join('');
+}
+function fermGuardar() {
+  var d = { fermentador: document.getElementById('ffTanque').value, producto: document.getElementById('ffProducto').value, lote: document.getElementById('ffLote').value.trim(), notas: document.getElementById('ffNotas').value.trim() };
+  if (!d.fermentador) { alert('Elige el fermentador.'); return; }
+  if (!d.producto) { alert('Elige el producto.'); return; }
+  if (!d.lote) { alert('Escribe el lote.'); return; }
+  document.getElementById('cargFerm').style.display = 'block';
+  api('fermAgregar', d).then(function(r) {
+    document.getElementById('cargFerm').style.display = 'none';
+    if (!r.ok) { msgFerm('error', r.error); return; }
+    DATOS.fermentadores = r.fermentadores;
+    document.getElementById('ffLote').value = ''; document.getElementById('ffNotas').value = '';
+    pintarFerm(); msgFerm('ok', '✅ ' + r.mensaje);
+  }).catch(function(e) { document.getElementById('cargFerm').style.display = 'none'; msgFerm('error', 'Error: ' + e.message); });
+}
+function fermVaciar(tanque, lote) {
+  if (!confirm('¿Cerrar ' + tanque + ' (lote ' + lote + ')? Ya no se podrán llenar kegs con ese lote.')) return;
+  document.getElementById('cargFerm').style.display = 'block';
+  api('fermCerrar', { fermentador: tanque, lote: lote }).then(function(r) {
+    document.getElementById('cargFerm').style.display = 'none';
+    if (!r.ok) { msgFerm('error', r.error); return; }
+    DATOS.fermentadores = r.fermentadores; pintarFerm(); msgFerm('ok', '✅ ' + r.mensaje);
+  }).catch(function(e) { document.getElementById('cargFerm').style.display = 'none'; msgFerm('error', 'Error: ' + e.message); });
+}
+
+// ========== pestaña Kegs ==========
+function cargarResumen(forzar) {
+  if (RESUMEN && !forzar) { pintarLista(); return; }
+  document.getElementById('cargKegs').style.display = 'block';
+  document.getElementById('lista').innerHTML = '';
+  api('kegResumen').then(function(r) {
+    document.getElementById('cargKegs').style.display = 'none';
+    if (!r.ok) return;
+    RESUMEN = r.kegs; pintarContadores(); pintarLista();
+  });
+}
+function pintarContadores() {
+  var c = { '': RESUMEN.length, LLENO: 0, ENTREGADO: 0, SUCIO: 0, VACIO: 0 };
+  RESUMEN.forEach(function(k) { if (c[k.estado] != null) c[k.estado]++; });
+  document.getElementById('contadores').innerHTML = [['', 'Todos'], ['LLENO', 'Llenos'], ['ENTREGADO', 'Entregados'], ['SUCIO', 'Sucios'], ['VACIO', 'Vacíos']].map(function(par) {
+    return '<button class="' + (FILTRO_ESTADO === par[0] ? 'activa' : '') + '" onclick="FILTRO_ESTADO=\'' + par[0] + '\';pintarContadores();pintarLista()">' + par[1] + ' (' + c[par[0]] + ')</button>';
+  }).join('');
+}
+function pintarLista() {
+  if (!RESUMEN) return;
+  var f = document.getElementById('filtro').value.trim().toLowerCase();
+  var filas = RESUMEN.filter(function(k) {
+    if (FILTRO_ESTADO && k.estado !== FILTRO_ESTADO) return false;
+    if (!f) return true;
+    return (k.codigo + ' ' + k.cliente + ' ' + k.producto + ' ' + k.ubicacion).toLowerCase().indexOf(f) !== -1;
+  });
+  document.getElementById('lista').innerHTML = filas.slice(0, 300).map(function(k) {
+    var det = k.capacidad + ' L';
+    if (k.producto) det += ' · ' + esc(k.producto) + (k.lote ? ' (' + esc(k.lote) + ')' : '');
+    if (k.cliente) det += '<br>' + esc(k.cliente) + (k.ubicacion ? ' — ' + esc(k.ubicacion) : '');
+    return '<div class="item" onclick="verTab(\'esc\');buscar(\'' + esc(k.codigo) + '\')"><div class="cod">' + esc(k.codigo) + '</div><div class="det">' + det + '</div><span class="chip ' + esc(k.estado) + '">' + esc(k.estado) + '</span></div>';
+  }).join('') || '<div class="cargando" style="display:block">Sin resultados.</div>';
+}
+</script>
+</body>
+</html>
