@@ -129,7 +129,8 @@
   <div class="carta">
     <h2 style="font-size:17px">Registrar fermentador</h2>
     <label>Fermentador</label><select id="ffTanque"></select>
-    <label>Producto</label><select id="ffProducto"><option value="">— elegir —</option></select>
+    <label>Producto</label><select id="ffProducto" onchange="ffMostrarEstilo()"><option value="">— elegir —</option></select>
+    <div class="aviso info" id="ffEstilo" style="display:none"></div>
     <label>Lote</label><input id="ffLote" placeholder="L2614101" autocomplete="off">
     <label>Notas (opcional)</label><input id="ffNotas" autocomplete="off">
     <div class="fila"><button class="btn" onclick="fermGuardar()">Registrar</button></div>
@@ -208,6 +209,13 @@ function avisar_(id, tipo, texto) {
   m.style.display = tipo ? 'block' : 'none';
 }
 function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function(c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+function estiloDe(p) { return (DATOS.estilos || {})[p] || ''; }
+function ffMostrarEstilo() {
+  var p = document.getElementById('ffProducto').value, e = estiloDe(p);
+  var d = document.getElementById('ffEstilo');
+  d.style.display = (p && e) ? 'block' : 'none';
+  d.textContent = e ? '🍺 ' + e : '';
+}
 function extraerCodigo(t) {
   t = String(t || '').trim();
   var m = t.match(/[?&]codigo=([A-Za-z0-9-]+)/i);
@@ -230,7 +238,8 @@ function elegirModo(a) {
   if (a === 'LLENAR') {
     if (!DATOS.fermentadores.length) { msgHome('error', 'No hay fermentadores activos. Registra uno en la pestaña Fermentadores.'); return; }
     var op = DATOS.fermentadores.map(function(f, i) {
-      return '<option value="' + i + '">' + esc(f.fermentador) + ' — ' + esc(f.producto) + ' (lote ' + esc(f.lote) + ')</option>';
+      var e = estiloDe(f.producto);
+      return '<option value="' + i + '">' + esc(f.fermentador) + ' — ' + esc(f.producto) + (e ? ' · ' + esc(e) : '') + ' (lote ' + esc(f.lote) + ')</option>';
     }).join('');
     pintarParams('🍺 Llenar barriles',
       '<label>Fermentador de origen</label><select id="pFerm"><option value="">— elegir —</option>' + op + '</select>',
@@ -474,7 +483,8 @@ function pintarCarta() {
     return '<button class="' + clase + '" onclick="elegirAccion(\'' + a + '\')">' + NOMBRE_ACCION[a] + '</button>';
   }).join('');
   var opFerm = DATOS.fermentadores.map(function(f, i) {
-    return '<option value="' + i + '">' + esc(f.fermentador) + ' — ' + esc(f.producto) + ' (lote ' + esc(f.lote) + ')</option>';
+    var e = estiloDe(f.producto);
+    return '<option value="' + i + '">' + esc(f.fermentador) + ' — ' + esc(f.producto) + (e ? ' · ' + esc(e) : '') + ' (lote ' + esc(f.lote) + ')</option>';
   }).join('');
   var cuerpoLlenar = DATOS.fermentadores.length
     ? '<label>Fermentador de origen</label><select id="fFerm"><option value="">— elegir —</option>' + opFerm + '</select>' +
@@ -573,8 +583,9 @@ function guardar(a) {
 // ========== fermentadores ==========
 function pintarFerm() {
   var html = DATOS.fermentadores.map(function(f) {
+    var e = estiloDe(f.producto);
     return '<div class="item"><div class="cod">' + esc(f.fermentador) + '</div>' +
-      '<div class="det"><b>' + esc(f.producto) + '</b> · lote ' + esc(f.lote) + (f.fecha ? '<br>desde ' + esc(f.fecha) : '') + (f.notas ? '<br>' + esc(f.notas) : '') + '</div>' +
+      '<div class="det"><b>' + esc(f.producto) + '</b>' + (e ? ' — ' + esc(e) : '') + ' · lote ' + esc(f.lote) + (f.fecha ? '<br>desde ' + esc(f.fecha) : '') + (f.notas ? '<br>' + esc(f.notas) : '') + '</div>' +
       '<button class="btn rojo" onclick="fermVaciar(\'' + esc(f.fermentador) + '\',\'' + esc(f.lote) + '\')">Cerrar</button></div>';
   }).join('');
   document.getElementById('listaFerm').innerHTML = html || '<div class="cargando" style="display:block">No hay fermentadores activos.</div>';
