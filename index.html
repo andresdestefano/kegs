@@ -7,7 +7,7 @@
 <style>
   :root {
     --ambar: #b8860b; --amber2: #8a6508; --fondo: #f6f3ee; --carta: #fff;
-    --lleno: #1e8e3e; --entregado: #1a73e8; --sucio: #b3261e; --vacio: #757575;
+    --lleno: #1e8e3e; --entregado: #1a73e8; --sucio: #b3261e; --vacio: #757575; --evento: #7b1fa2;
   }
   * { box-sizing: border-box; margin: 0; padding: 0; font-family: system-ui, -apple-system, sans-serif; }
   body { background: var(--fondo); color: #222; padding-bottom: 40px; }
@@ -18,16 +18,20 @@
   nav button.activa { background: var(--fondo); color: var(--amber2); border-radius: 10px 10px 0 0; }
   main { padding: 14px; max-width: 560px; margin: 0 auto; }
   .btn-grande { width: 100%; padding: 16px; font-size: 18px; font-weight: 700; color: #fff; background: var(--ambar); border: none; border-radius: 12px; }
-  .btn-grande.rojo { background: var(--sucio); }
   .fila { display: flex; gap: 8px; margin-top: 10px; }
   .fila input { flex: 1; }
   input, select, textarea { width: 100%; padding: 11px; font-size: 16px; border: 1px solid #ccc; border-radius: 8px; background: #fff; }
   .btn { padding: 11px 16px; font-size: 15px; font-weight: 600; border: none; border-radius: 8px; background: var(--ambar); color: #fff; }
   .btn.gris { background: #9e9e9e; } .btn.rojo { background: #b3261e; }
-  #scanBox { position: relative; width: 100%; aspect-ratio: 1/1; max-height: 60vh; background: #000; border-radius: 12px; overflow: hidden; display: none; margin-top: 12px; }
+  .modos { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .modos button { padding: 20px 8px; font-size: 16px; font-weight: 700; border: 2px solid #e2d9c6; background: #fff; border-radius: 14px; color: #444; box-shadow: 0 1px 3px rgba(0,0,0,.07); }
+  .modos button .ic { display: block; font-size: 30px; margin-bottom: 6px; }
+  .modos button.ancho { grid-column: 1 / -1; }
+  .titulo-vista { font-size: 17px; font-weight: 800; color: var(--amber2); margin-bottom: 10px; }
+  #scanBox { position: relative; width: 100%; aspect-ratio: 1/1; max-height: 52vh; background: #000; border-radius: 12px; overflow: hidden; display: none; margin-top: 10px; }
   #scanBox video { width: 100%; height: 100%; object-fit: cover; }
   #scanBox .marco { position: absolute; inset: 18%; border: 3px solid #fff; border-radius: 16px; box-shadow: 0 0 0 100vmax rgba(0,0,0,.35); }
-  #scanBox .cerrar { position: absolute; top: 8px; right: 8px; background: rgba(0,0,0,.6); color: #fff; border: none; border-radius: 999px; width: 38px; height: 38px; font-size: 20px; }
+  .banner { margin-top: 2px; padding: 10px 12px; border-radius: 10px; background: #fff7e0; border: 2px solid var(--ambar); color: var(--amber2); font-size: 14.5px; font-weight: 600; }
   .aviso { margin-top: 10px; padding: 10px 12px; border-radius: 8px; display: none; font-size: 14px; }
   .aviso.error { display: block; background: #fdecea; color: #b3261e; }
   .aviso.info { display: block; background: #e8f0fe; color: #1a4fa0; }
@@ -38,6 +42,7 @@
   .chip { font-size: 12px; font-weight: 700; color: #fff; padding: 3px 10px; border-radius: 999px; }
   .chip.LLENO { background: var(--lleno); } .chip.ENTREGADO { background: var(--entregado); }
   .chip.SUCIO { background: var(--sucio); } .chip.VACIO { background: var(--vacio); }
+  .chip.EVENTO { background: var(--evento); }
   .datos { margin-top: 8px; font-size: 14.5px; line-height: 1.55; color: #444; }
   .acciones { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 12px; }
   .acciones button { padding: 13px 4px; font-size: 15px; font-weight: 700; border-radius: 10px; border: 2px solid #ddd; background: #fafafa; color: #555; }
@@ -51,6 +56,8 @@
   .item { background: #fff; border-radius: 10px; padding: 10px 12px; margin-top: 8px; display: flex; align-items: center; gap: 10px; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
   .item .cod { font-weight: 800; font-size: 15px; min-width: 56px; }
   .item .det { flex: 1; font-size: 13px; color: #555; line-height: 1.4; }
+  .item.malo { border-left: 4px solid var(--sucio); }
+  .item.bueno { border-left: 4px solid var(--lleno); }
   .cargando { text-align: center; color: #888; padding: 20px; display: none; }
 </style>
 </head>
@@ -63,30 +70,44 @@
 </nav>
 
 <main id="tabEsc">
-  <button class="btn-grande" id="btnScan" onclick="abrirCamara()">📷 Escanear en vivo</button>
-  <div id="scanBox">
-    <video id="video" playsinline muted></video>
-    <div class="marco"></div>
-    <button class="cerrar" onclick="cerrarCamara()">✕</button>
-  </div>
-  <div class="fila">
-    <input id="codManual" placeholder="o escribe el código (EV17)" autocomplete="off">
-    <button class="btn" onclick="buscarManual()">Buscar</button>
-  </div>
-  <button class="btn gris" id="btnMulti" style="width:100%;margin-top:10px" onclick="toggleEntrega()">🚚 Entrega múltiple a un cliente</button>
-  <div class="carta" id="cardEntrega" style="display:none">
-    <h2 style="font-size:17px">Entrega múltiple</h2>
-    <label>Cliente (de la base CRM)</label>
-    <input id="emCliente" list="dlClientes" autocomplete="off" placeholder="Empieza a escribir…">
-    <label>Ubicación / sucursal (opcional)</label>
-    <input id="emUbicacion" autocomplete="off">
-    <div class="fila">
-      <button class="btn" onclick="empezarEntrega()">Empezar</button>
-      <button class="btn gris" onclick="document.getElementById('cardEntrega').style.display='none'">Cancelar</button>
+
+  <!-- Vista 1: elegir qué hacer -->
+  <div id="vModos">
+    <div class="titulo-vista">¿Qué quieres hacer?</div>
+    <div class="modos">
+      <button onclick="elegirModo('LLENAR')"><span class="ic">🍺</span>Llenar</button>
+      <button onclick="elegirModo('ENTREGAR')"><span class="ic">🚚</span>Entregar</button>
+      <button onclick="elegirModo('RECOGER')"><span class="ic">↩️</span>Devolver</button>
+      <button onclick="elegirModo('LAVAR')"><span class="ic">🧼</span>Limpiar</button>
+      <button onclick="elegirModo('DEPOSITO')"><span class="ic">📦</span>Mover a depósito</button>
+      <button onclick="elegirModo('EVENTO')"><span class="ic">🎪</span>Evento interno</button>
+      <button class="ancho" onclick="elegirModo('REVISAR')"><span class="ic">🔍</span>Revisar estatus</button>
     </div>
   </div>
-  <div class="aviso info" id="banEntrega" style="display:none"></div>
-  <div class="aviso" id="msg"></div>
+
+  <!-- Vista 2: datos del modo (cliente, fermentador, nombre…) -->
+  <div id="vParams" style="display:none"></div>
+
+  <!-- Vista 3: escaneo continuo -->
+  <div id="vScan" style="display:none">
+    <div class="banner" id="banModo"></div>
+    <div id="scanBox">
+      <video id="video" playsinline muted></video>
+      <div class="marco"></div>
+    </div>
+    <div class="fila">
+      <input id="codManual" placeholder="o escribe el código (EV17)" autocomplete="off">
+      <button class="btn" onclick="manual()">OK</button>
+    </div>
+    <div class="fila">
+      <button class="btn rojo" style="flex:1" onclick="terminarModo()">✔ Terminar</button>
+    </div>
+    <div class="aviso" id="msg"></div>
+    <div id="feed"></div>
+  </div>
+
+  <!-- Resumen final + carta de un keg (toque en lista o enlace directo) -->
+  <div class="aviso" id="msgHome"></div>
   <div class="cargando" id="cargEsc">⏳ Un momento…</div>
   <div id="card"></div>
 </main>
@@ -120,15 +141,27 @@
 
 <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <script>
-// ====== CONFIG: pega aquí la URL /exec de tu Web App ======
+// ====== CONFIG: URL /exec de la Web App ======
 var API = 'https://script.google.com/macros/s/AKfycbznp6ECYaCj3UOo0MwJAGuuVSGFhn4nC4y25_wvFUJ7NlDPhccawZM4bJO_fkfzKQUjEw/exec';
 
 var DATOS = { clientes: [], productosCat: [], tanques: [], fermentadores: [] };
 var KEG = null, RESUMEN = null, FILTRO_ESTADO = '';
-var SUGERIDA = { VACIO: 'LLENAR', LLENO: 'ENTREGAR', ENTREGADO: 'RECOGER', SUCIO: 'LAVAR' };
-var NOMBRE_ACCION = { LLENAR: 'Llenar', ENTREGAR: 'Entregar', RECOGER: 'Recoger', LAVAR: 'Lavar' };
+var SUGERIDA = { VACIO: 'LLENAR', LLENO: 'ENTREGAR', ENTREGADO: 'RECOGER', EVENTO: 'RECOGER', SUCIO: 'LAVAR' };
+var NOMBRE_ACCION = { LLENAR: 'Llenar', ENTREGAR: 'Entregar', RECOGER: 'Devolver', LAVAR: 'Limpiar', DEPOSITO: 'A depósito', EVENTO: 'A evento' };
+var MODOS = {
+  LLENAR:   { ic: '🍺', nombre: 'Llenar' },
+  ENTREGAR: { ic: '🚚', nombre: 'Entregar' },
+  RECOGER:  { ic: '↩️', nombre: 'Devolver' },
+  LAVAR:    { ic: '🧼', nombre: 'Limpiar' },
+  DEPOSITO: { ic: '📦', nombre: 'Mover a depósito' },
+  EVENTO:   { ic: '🎪', nombre: 'Evento interno' },
+  REVISAR:  { ic: '🔍', nombre: 'Revisar estatus' }
+};
+var MODO = null;          // { accion, extra:{...}, hechos:[], errores:0 }
+var RECIENTES = {};       // debounce por código
+var OCUPADO = false;      // una llamada a la vez
 
-// ---------- API (fetch al Apps Script) ----------
+// ---------- API ----------
 function api(fn, datos) {
   var url = API + '?api=' + encodeURIComponent(fn);
   if (datos) url += '&datos=' + encodeURIComponent(JSON.stringify(datos));
@@ -145,12 +178,12 @@ api('kegDatos').then(function(r) {
   }
 });
 document.getElementById('codManual').addEventListener('keydown', function(ev) {
-  if (ev.key === 'Enter') { ev.preventDefault(); buscarManual(); }
+  if (ev.key === 'Enter') { ev.preventDefault(); manual(); }
 });
-// enlace directo ?codigo=EVxx
+// enlace directo ?codigo=EVxx → ficha del barril
 (function() {
   var m = location.search.match(/[?&]codigo=([A-Za-z0-9-]+)/i);
-  if (m) buscar(m[1]);
+  if (m) verKeg(m[1]);
 })();
 
 function verTab(t) {
@@ -166,6 +199,7 @@ function verTab(t) {
 }
 
 function msg(tipo, texto) { avisar_('msg', tipo, texto); }
+function msgHome(tipo, texto) { avisar_('msgHome', tipo, texto); }
 function msgFerm(tipo, texto) { avisar_('msgFerm', tipo, texto); }
 function avisar_(id, tipo, texto) {
   var m = document.getElementById(id);
@@ -174,8 +208,185 @@ function avisar_(id, tipo, texto) {
   m.style.display = tipo ? 'block' : 'none';
 }
 function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function(c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+function extraerCodigo(t) {
+  t = String(t || '').trim();
+  var m = t.match(/[?&]codigo=([A-Za-z0-9-]+)/i);
+  if (m) return m[1].toUpperCase();
+  m = t.match(/\b(EV\s?-?\d{1,4})\b/i);
+  if (m) return m[1].replace(/[\s-]/g, '').toUpperCase();
+  return null;
+}
 
-// ========== ESCÁNER EN VIVO ==========
+// ========== VISTAS del flujo modo-primero ==========
+function vista(v) {
+  document.getElementById('vModos').style.display = (v === 'modos') ? '' : 'none';
+  document.getElementById('vParams').style.display = (v === 'params') ? '' : 'none';
+  document.getElementById('vScan').style.display = (v === 'scan') ? '' : 'none';
+}
+
+function elegirModo(a) {
+  document.getElementById('card').innerHTML = '';
+  msgHome();
+  if (a === 'LLENAR') {
+    if (!DATOS.fermentadores.length) { msgHome('error', 'No hay fermentadores activos. Registra uno en la pestaña Fermentadores.'); return; }
+    var op = DATOS.fermentadores.map(function(f, i) {
+      return '<option value="' + i + '">' + esc(f.fermentador) + ' — ' + esc(f.producto) + ' (lote ' + esc(f.lote) + ')</option>';
+    }).join('');
+    pintarParams('🍺 Llenar barriles',
+      '<label>Fermentador de origen</label><select id="pFerm"><option value="">— elegir —</option>' + op + '</select>',
+      function() {
+        var i = document.getElementById('pFerm').value;
+        if (i === '') { alert('Elige el fermentador de origen.'); return null; }
+        var f = DATOS.fermentadores[Number(i)];
+        return { producto: f.producto, lote: f.lote, _txt: f.fermentador + ' · ' + f.producto + ' (lote ' + f.lote + ')' };
+      });
+  } else if (a === 'ENTREGAR') {
+    pintarParams('🚚 Entregar barriles',
+      '<label>Cliente (de la base CRM)</label><input id="pCliente" list="dlClientes" autocomplete="off" placeholder="Empieza a escribir…">' +
+      '<label>Ubicación / sucursal (opcional)</label><input id="pUbi" autocomplete="off">',
+      function() {
+        var cli = document.getElementById('pCliente').value.trim();
+        if (!DATOS.clientes.some(function(x) { return x.toLowerCase() === cli.toLowerCase(); })) { alert('El cliente debe existir en la base del CRM.'); return null; }
+        var ubi = document.getElementById('pUbi').value.trim();
+        return { cliente: cli, ubicacion: ubi, _txt: cli + (ubi ? ' — ' + ubi : '') };
+      });
+  } else if (a === 'DEPOSITO') {
+    pintarParams('📦 Mover a depósito',
+      '<label>Nombre del depósito</label><input id="pDep" autocomplete="off" placeholder="Bodega 2, contenedor…">',
+      function() {
+        var n = document.getElementById('pDep').value.trim();
+        if (!n) { alert('Escribe el nombre del depósito.'); return null; }
+        return { ubicacion: n, _txt: n };
+      });
+  } else if (a === 'EVENTO') {
+    pintarParams('🎪 Evento interno',
+      '<label>Nombre del evento</label><input id="pEvt" autocomplete="off" placeholder="Feria cerveza artesanal…">' +
+      '<div class="aviso info" style="display:block">El barril queda EN EVENTO y debe regresar: al volver se registra con "Devolver".</div>',
+      function() {
+        var n = document.getElementById('pEvt').value.trim();
+        if (!n) { alert('Escribe el nombre del evento.'); return null; }
+        return { ubicacion: n, _txt: n };
+      });
+  } else {
+    iniciarModo(a, {});
+    return;
+  }
+  MODO_PENDIENTE = a;
+}
+
+var MODO_PENDIENTE = null, PARAMS_LEER = null;
+function pintarParams(titulo, cuerpo, leer) {
+  PARAMS_LEER = leer;
+  document.getElementById('vParams').innerHTML =
+    '<div class="titulo-vista">' + titulo + '</div>' +
+    '<div class="carta" style="margin-top:0">' + cuerpo +
+      '<div class="fila">' +
+        '<button class="btn" style="flex:1" onclick="confirmarParams()">Empezar a escanear</button>' +
+        '<button class="btn gris" onclick="vista(\'modos\')">Volver</button>' +
+      '</div>' +
+    '</div>';
+  vista('params');
+}
+function confirmarParams() {
+  var extra = PARAMS_LEER ? PARAMS_LEER() : {};
+  if (extra === null) return;
+  iniciarModo(MODO_PENDIENTE, extra);
+}
+
+function iniciarModo(a, extra) {
+  MODO = { accion: a, extra: extra, hechos: [], errores: 0 };
+  RECIENTES = {};
+  document.getElementById('feed').innerHTML = '';
+  document.getElementById('codManual').value = '';
+  pintarBannerModo();
+  msg('info', a === 'REVISAR' ? 'Escanea un barril para ver su estado.' : 'Escanea los barriles uno tras otro.');
+  vista('scan');
+  abrirCamara();
+}
+
+function pintarBannerModo() {
+  var m = MODOS[MODO.accion];
+  var det = MODO.extra._txt ? ' → <b>' + esc(MODO.extra._txt) + '</b>' : '';
+  var n = MODO.accion === 'REVISAR' ? '' : ' · <b>' + MODO.hechos.length + '</b> ✔' + (MODO.errores ? ' · ' + MODO.errores + ' ⛔' : '');
+  document.getElementById('banModo').innerHTML = m.ic + ' <b>' + m.nombre + '</b>' + det + n;
+}
+
+function terminarModo() {
+  cerrarCamara();
+  var a = MODO ? MODO.accion : '';
+  if (MODO && a !== 'REVISAR') {
+    var n = MODO.hechos.length;
+    msgHome(n ? 'ok' : 'info', (n ? '✅ ' : '') + MODOS[a].nombre + ': ' + n + ' barril(es)' +
+      (n ? ' — ' + MODO.hechos.join(', ') : '') + (MODO.errores ? ' · ' + MODO.errores + ' rechazado(s)' : '') + '.');
+  } else { msgHome(); }
+  MODO = null;
+  msg();
+  vista('modos');
+}
+
+function manual() {
+  var t = document.getElementById('codManual').value.trim();
+  if (!t) return;
+  document.getElementById('codManual').value = '';
+  procesarLectura(t, true);
+}
+
+// un escaneo = una llamada; el servidor valida el estado
+function procesarLectura(texto, esManual) {
+  if (!MODO) return;
+  var cod = extraerCodigo(texto);
+  if (!cod) { if (esManual) msg('error', 'No reconozco un código de barril ahí.'); return; }
+  var ahora = Date.now();
+  if (!esManual && RECIENTES[cod] && ahora - RECIENTES[cod] < 4000) return;
+  RECIENTES[cod] = ahora;
+  if (OCUPADO) return;
+  OCUPADO = true;
+
+  if (MODO.accion === 'REVISAR') {
+    api('kegBuscar', { texto: cod }).then(function(r) {
+      OCUPADO = false;
+      if (!r.ok) { pip(false); feed(false, cod, r.error); return; }
+      pip(true);
+      var k = r.keg, det = [];
+      det.push(k.capacidad + ' L · ' + esc(k.estado));
+      if (k.producto) det.push(esc(k.producto) + (k.lote ? ' (lote ' + esc(k.lote) + ')' : ''));
+      if (k.cliente) det.push(esc(k.cliente) + (k.ubicacion ? ' — ' + esc(k.ubicacion) : ''));
+      else if (k.ubicacion) det.push('📍 ' + esc(k.ubicacion));
+      feedHtml('bueno', k.codigo, det.join('<br>'), '<span class="chip ' + esc(k.estado) + '">' + esc(k.estado) + '</span>');
+    }).catch(function(e) { OCUPADO = false; msg('error', 'Error de conexión: ' + e.message); });
+    return;
+  }
+
+  if (MODO.hechos.indexOf(cod) !== -1) { OCUPADO = false; feed(false, cod, 'Ya registrado en esta tanda.'); return; }
+  var d = { codigo: cod, accion: MODO.accion };
+  if (MODO.extra.producto)  d.producto  = MODO.extra.producto;
+  if (MODO.extra.lote)      d.lote      = MODO.extra.lote;
+  if (MODO.extra.cliente)   d.cliente   = MODO.extra.cliente;
+  if (MODO.extra.ubicacion) d.ubicacion = MODO.extra.ubicacion;
+  api('kegAccion', d).then(function(r) {
+    OCUPADO = false;
+    if (!MODO) return;
+    if (!r.ok) { MODO.errores++; pip(false); feed(false, cod, r.error); pintarBannerModo(); return; }
+    MODO.hechos.push(r.keg.codigo);
+    RESUMEN = null;
+    pip(true);
+    feed(true, r.keg.codigo, r.mensaje + ' → ' + r.keg.estado);
+    pintarBannerModo();
+  }).catch(function(e) { OCUPADO = false; msg('error', 'Error de conexión: ' + e.message); });
+}
+
+function pip(ok) { if (navigator.vibrate) navigator.vibrate(ok ? 80 : [60, 60, 120]); }
+function feed(ok, cod, texto) { feedHtml(ok ? 'bueno' : 'malo', cod, esc(texto), ok ? '✅' : '⛔'); }
+function feedHtml(clase, cod, detHtml, extremo) {
+  var el = document.createElement('div');
+  el.className = 'item ' + clase;
+  el.innerHTML = '<div class="cod">' + esc(cod) + '</div><div class="det">' + detHtml + '</div>' + extremo;
+  var f = document.getElementById('feed');
+  f.insertBefore(el, f.firstChild);
+  msg();
+}
+
+// ========== ESCÁNER EN VIVO (continuo) ==========
 var stream = null, scanRAF = null, detector = null, escaneando = false;
 
 async function abrirCamara() {
@@ -183,13 +394,12 @@ async function abrirCamara() {
     msg('error', 'Tu navegador no permite cámara. Escribe el código a mano.'); return;
   }
   document.getElementById('scanBox').style.display = 'block';
-  document.getElementById('btnScan').style.display = 'none';
-  msg('info', 'Apunta la cámara al QR del barril…');
   try {
     stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' } }, audio: false });
   } catch (e) {
-    msg('error', 'No diste permiso de cámara o no hay cámara. Escribe el código a mano.');
-    cerrarCamara(); return;
+    msg('error', 'Sin permiso de cámara. Escribe el código a mano.');
+    document.getElementById('scanBox').style.display = 'none';
+    return;
   }
   var v = document.getElementById('video');
   v.srcObject = stream;
@@ -209,7 +419,6 @@ function cerrarCamara() {
   if (scanRAF) { cancelAnimationFrame(scanRAF); scanRAF = null; }
   if (stream) { stream.getTracks().forEach(function(t) { t.stop(); }); stream = null; }
   document.getElementById('scanBox').style.display = 'none';
-  document.getElementById('btnScan').style.display = '';
 }
 
 async function loopEscaneo() {
@@ -230,29 +439,26 @@ async function loopEscaneo() {
       }
     }
   }
-  if (texto) { escaneando = false; if (navigator.vibrate) navigator.vibrate(80); cerrarCamara(); buscar(texto); return; }
+  if (texto) procesarLectura(texto, false);   // NO se cierra la cámara: escaneo continuo
   scanRAF = requestAnimationFrame(loopEscaneo);
 }
 
-// ========== búsqueda + acciones ==========
-function buscarManual() {
-  var t = document.getElementById('codManual').value.trim();
-  if (!t) { msg('error', 'Escribe un código, por ejemplo EV17.'); return; }
-  buscar(t);
-}
-
-function buscar(texto) {
+// ========== ficha de un keg (toque en la lista o enlace ?codigo=) ==========
+function verKeg(texto) {
+  terminarSiActivo_();
+  verTab('esc');
   document.getElementById('cargEsc').style.display = 'block';
   api('kegBuscar', { texto: texto }).then(function(r) {
     document.getElementById('cargEsc').style.display = 'none';
-    if (!r.ok) { msg('error', r.error); return; }
-    document.getElementById('codManual').value = '';
-    if (ENTREGA) { entregaLote(r.keg); return; }
-    msg(); KEG = r.keg; pintarCarta();
+    if (!r.ok) { msgHome('error', r.error); return; }
+    msgHome(); KEG = r.keg; pintarCarta();
   }).catch(function(e) {
     document.getElementById('cargEsc').style.display = 'none';
-    msg('error', 'Error de conexión: ' + e.message);
+    msgHome('error', 'Error de conexión: ' + e.message);
   });
+}
+function terminarSiActivo_() {
+  if (MODO) { MODO = null; cerrarCamara(); msg(); vista('modos'); }
 }
 
 function pintarCarta() {
@@ -261,9 +467,10 @@ function pintarCarta() {
   d.push(k.capacidad + ' L · ' + esc(k.tipo) + ' · conector ' + esc(k.conector));
   if (k.producto) d.push('<b>Producto:</b> ' + esc(k.producto) + (k.lote ? ' (lote ' + esc(k.lote) + ')' : ''));
   if (k.cliente) d.push('<b>Cliente:</b> ' + esc(k.cliente) + (k.ubicacion ? ' — ' + esc(k.ubicacion) : ''));
+  else if (k.ubicacion) d.push('<b>Ubicación:</b> ' + esc(k.ubicacion));
   if (k.ultMov) d.push('<b>Últ. movimiento:</b> ' + esc(k.ultMov));
-  var botones = ['LLENAR', 'ENTREGAR', 'RECOGER', 'LAVAR'].map(function(a) {
-    var clase = (a === sug ? 'sugerida' : '') + (a === 'LLENAR' && k.estado !== 'VACIO' ? ' bloqueada' : '');
+  var botones = ['LLENAR', 'ENTREGAR', 'RECOGER', 'LAVAR', 'DEPOSITO', 'EVENTO'].map(function(a) {
+    var clase = (a === sug ? 'sugerida' : '') + (bloqueada_(a, k.estado) ? ' bloqueada' : '');
     return '<button class="' + clase + '" onclick="elegirAccion(\'' + a + '\')">' + NOMBRE_ACCION[a] + '</button>';
   }).join('');
   var opFerm = DATOS.fermentadores.map(function(f, i) {
@@ -288,23 +495,44 @@ function pintarCarta() {
       '</form>' +
       '<form class="fAccion" id="fRECOGER" onsubmit="return false">' +
         '<label>Notas (opcional)</label><input id="fNotasR" autocomplete="off">' +
-        '<div class="fila"><button class="btn" onclick="guardar(\'RECOGER\')">Confirmar recogida (queda SUCIO)</button></div>' +
+        '<div class="fila"><button class="btn" onclick="guardar(\'RECOGER\')">Confirmar devolución (queda SUCIO)</button></div>' +
       '</form>' +
       '<form class="fAccion" id="fLAVAR" onsubmit="return false">' +
         '<label>Notas (opcional)</label><input id="fNotasV" autocomplete="off">' +
-        '<div class="fila"><button class="btn" onclick="guardar(\'LAVAR\')">Confirmar lavado (queda VACÍO)</button></div>' +
+        '<div class="fila"><button class="btn" onclick="guardar(\'LAVAR\')">Confirmar limpieza (queda VACÍO)</button></div>' +
+      '</form>' +
+      '<form class="fAccion" id="fDEPOSITO" onsubmit="return false">' +
+        '<label>Nombre del depósito</label><input id="fDep" autocomplete="off">' +
+        '<label>Notas (opcional)</label><input id="fNotasD" autocomplete="off">' +
+        '<div class="fila"><button class="btn" onclick="guardar(\'DEPOSITO\')">Mover a depósito</button></div>' +
+      '</form>' +
+      '<form class="fAccion" id="fEVENTO" onsubmit="return false">' +
+        '<label>Nombre del evento</label><input id="fEvt" autocomplete="off">' +
+        '<label>Notas (opcional)</label><input id="fNotasEv" autocomplete="off">' +
+        '<div class="fila"><button class="btn" onclick="guardar(\'EVENTO\')">Enviar a evento</button></div>' +
       '</form>' +
     '</div>';
 }
 
+function bloqueada_(a, estado) {
+  if (a === 'LLENAR') return estado !== 'VACIO';
+  if (a === 'ENTREGAR') return estado !== 'LLENO';
+  if (a === 'RECOGER') return estado !== 'ENTREGADO' && estado !== 'EVENTO';
+  if (a === 'LAVAR') return estado !== 'SUCIO';
+  if (a === 'DEPOSITO') return estado === 'ENTREGADO' || estado === 'EVENTO';
+  if (a === 'EVENTO') return estado !== 'LLENO';
+  return false;
+}
+
 function elegirAccion(a) {
-  if (a === 'LLENAR' && KEG.estado !== 'VACIO') {
-    msg('error', 'El barril está ' + KEG.estado + '. Solo se llenan barriles VACÍOS' + (KEG.estado === 'SUCIO' ? ': lávalo primero.' : '.'));
+  if (bloqueada_(a, KEG.estado)) {
+    var extra = (a === 'LLENAR' && KEG.estado === 'SUCIO') ? ' Lávalo primero.' : '';
+    msgHome('error', 'El barril está ' + KEG.estado + ' — no se puede "' + NOMBRE_ACCION[a] + '".' + extra);
     return;
   }
   var sug = SUGERIDA[KEG.estado];
-  if (a !== sug && !confirm('El barril está ' + KEG.estado + '. Lo normal sería "' + NOMBRE_ACCION[sug] + '". ¿Seguro que quieres "' + NOMBRE_ACCION[a] + '"?')) return;
-  ['LLENAR', 'ENTREGAR', 'RECOGER', 'LAVAR'].forEach(function(x) {
+  if (a !== sug && sug && !confirm('El barril está ' + KEG.estado + '. Lo normal sería "' + NOMBRE_ACCION[sug] + '". ¿Seguro que quieres "' + NOMBRE_ACCION[a] + '"?')) return;
+  ['LLENAR', 'ENTREGAR', 'RECOGER', 'LAVAR', 'DEPOSITO', 'EVENTO'].forEach(function(x) {
     document.getElementById('f' + x).style.display = (x === a) ? 'block' : 'none';
   });
 }
@@ -325,51 +553,21 @@ function guardar(a) {
     if (!DATOS.clientes.some(function(c) { return c.toLowerCase() === d.cliente.toLowerCase(); })) { alert('El cliente debe existir en la base del CRM.'); return; }
   } else if (a === 'RECOGER') { d.notas = document.getElementById('fNotasR').value.trim(); }
   else if (a === 'LAVAR') { d.notas = document.getElementById('fNotasV').value.trim(); }
+  else if (a === 'DEPOSITO') {
+    d.ubicacion = document.getElementById('fDep').value.trim();
+    d.notas = document.getElementById('fNotasD').value.trim();
+    if (!d.ubicacion) { alert('Escribe el nombre del depósito.'); return; }
+  } else if (a === 'EVENTO') {
+    d.ubicacion = document.getElementById('fEvt').value.trim();
+    d.notas = document.getElementById('fNotasEv').value.trim();
+    if (!d.ubicacion) { alert('Escribe el nombre del evento.'); return; }
+  }
   document.getElementById('cargEsc').style.display = 'block';
   api('kegAccion', d).then(function(r) {
     document.getElementById('cargEsc').style.display = 'none';
-    if (!r.ok) { msg('error', r.error); return; }
-    KEG = r.keg; RESUMEN = null; pintarCarta(); msg('ok', '✅ ' + r.mensaje);
-  }).catch(function(e) { document.getElementById('cargEsc').style.display = 'none'; msg('error', 'Error: ' + e.message); });
-}
-
-// ========== entrega múltiple ==========
-var ENTREGA = null;
-function toggleEntrega() { var c = document.getElementById('cardEntrega'); c.style.display = (c.style.display === 'none') ? '' : 'none'; }
-function empezarEntrega() {
-  var cli = document.getElementById('emCliente').value.trim();
-  var ubi = document.getElementById('emUbicacion').value.trim();
-  if (!DATOS.clientes.some(function(x) { return x.toLowerCase() === cli.toLowerCase(); })) { alert('El cliente debe existir en la base del CRM.'); return; }
-  ENTREGA = { cliente: cli, ubicacion: ubi, codigos: [] };
-  document.getElementById('cardEntrega').style.display = 'none';
-  document.getElementById('btnMulti').style.display = 'none';
-  document.getElementById('card').innerHTML = '';
-  pintarBanner(); msg('info', 'Modo entrega activo: escanea los barriles uno tras otro.');
-}
-function pintarBanner() {
-  var b = document.getElementById('banEntrega');
-  b.style.display = 'block';
-  b.innerHTML = '🚚 Entregando a <b>' + esc(ENTREGA.cliente) + '</b>' + (ENTREGA.ubicacion ? ' — ' + esc(ENTREGA.ubicacion) : '') +
-    ' · <b>' + ENTREGA.codigos.length + '</b> barril(es)<div class="fila"><button class="btn rojo" onclick="terminarEntrega()">Terminar entrega</button></div>';
-}
-function terminarEntrega() {
-  var n = ENTREGA.codigos.length;
-  msg('ok', '✅ Entrega terminada: ' + n + ' barril(es) a ' + ENTREGA.cliente + (n ? ' — ' + ENTREGA.codigos.join(', ') : '') + '.');
-  ENTREGA = null;
-  document.getElementById('banEntrega').style.display = 'none';
-  document.getElementById('btnMulti').style.display = '';
-}
-function entregaLote(keg) {
-  if (keg.estado !== 'LLENO') { msg('error', keg.codigo + ' está ' + keg.estado + ' — solo se entregan barriles LLENOS.'); return; }
-  if (ENTREGA.codigos.indexOf(keg.codigo) !== -1) { msg('error', keg.codigo + ' ya está en esta entrega.'); return; }
-  document.getElementById('cargEsc').style.display = 'block';
-  api('kegAccion', { codigo: keg.codigo, accion: 'ENTREGAR', cliente: ENTREGA.cliente, ubicacion: ENTREGA.ubicacion }).then(function(r) {
-    document.getElementById('cargEsc').style.display = 'none';
-    if (!r.ok) { msg('error', r.error); return; }
-    if (!ENTREGA) return;
-    ENTREGA.codigos.push(r.keg.codigo); RESUMEN = null; pintarBanner();
-    msg('ok', '✅ ' + r.keg.codigo + ' entregado a ' + ENTREGA.cliente + ' (' + ENTREGA.codigos.length + ')');
-  }).catch(function(e) { document.getElementById('cargEsc').style.display = 'none'; msg('error', 'Error: ' + e.message); });
+    if (!r.ok) { msgHome('error', r.error); return; }
+    KEG = r.keg; RESUMEN = null; pintarCarta(); msgHome('ok', '✅ ' + r.mensaje);
+  }).catch(function(e) { document.getElementById('cargEsc').style.display = 'none'; msgHome('error', 'Error: ' + e.message); });
 }
 
 // ========== fermentadores ==========
@@ -420,9 +618,11 @@ function cargarResumen(forzar) {
   });
 }
 function pintarContadores() {
-  var c = { '': RESUMEN.length, LLENO: 0, ENTREGADO: 0, SUCIO: 0, VACIO: 0 };
+  var c = { '': RESUMEN.length, LLENO: 0, ENTREGADO: 0, EVENTO: 0, SUCIO: 0, VACIO: 0 };
   RESUMEN.forEach(function(k) { if (c[k.estado] != null) c[k.estado]++; });
-  document.getElementById('contadores').innerHTML = [['', 'Todos'], ['LLENO', 'Llenos'], ['ENTREGADO', 'Entregados'], ['SUCIO', 'Sucios'], ['VACIO', 'Vacíos']].map(function(par) {
+  var pares = [['', 'Todos'], ['LLENO', 'Llenos'], ['ENTREGADO', 'Entregados'], ['EVENTO', 'En evento'], ['SUCIO', 'Sucios'], ['VACIO', 'Vacíos']];
+  document.getElementById('contadores').innerHTML = pares.map(function(par) {
+    if (par[0] === 'EVENTO' && !c.EVENTO) return '';
     return '<button class="' + (FILTRO_ESTADO === par[0] ? 'activa' : '') + '" onclick="FILTRO_ESTADO=\'' + par[0] + '\';pintarContadores();pintarLista()">' + par[1] + ' (' + c[par[0]] + ')</button>';
   }).join('');
 }
@@ -438,7 +638,8 @@ function pintarLista() {
     var det = k.capacidad + ' L';
     if (k.producto) det += ' · ' + esc(k.producto) + (k.lote ? ' (' + esc(k.lote) + ')' : '');
     if (k.cliente) det += '<br>' + esc(k.cliente) + (k.ubicacion ? ' — ' + esc(k.ubicacion) : '');
-    return '<div class="item" onclick="verTab(\'esc\');buscar(\'' + esc(k.codigo) + '\')"><div class="cod">' + esc(k.codigo) + '</div><div class="det">' + det + '</div><span class="chip ' + esc(k.estado) + '">' + esc(k.estado) + '</span></div>';
+    else if (k.ubicacion) det += '<br>📍 ' + esc(k.ubicacion);
+    return '<div class="item" onclick="verKeg(\'' + esc(k.codigo) + '\')"><div class="cod">' + esc(k.codigo) + '</div><div class="det">' + det + '</div><span class="chip ' + esc(k.estado) + '">' + esc(k.estado) + '</span></div>';
   }).join('') || '<div class="cargando" style="display:block">Sin resultados.</div>';
 }
 </script>
