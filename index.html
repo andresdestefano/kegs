@@ -210,11 +210,14 @@ function avisar_(id, tipo, texto) {
 }
 function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function(c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
 function estiloDe(p) { return (DATOS.estilos || {})[p] || ''; }
+function descDe(p) { return (DATOS.descripciones || {})[p] || ''; }
 function ffMostrarEstilo() {
-  var p = document.getElementById('ffProducto').value, e = estiloDe(p);
+  var p = document.getElementById('ffProducto').value;
+  var e = estiloDe(p), t = descDe(p);
   var d = document.getElementById('ffEstilo');
-  d.style.display = (p && e) ? 'block' : 'none';
-  d.textContent = e ? '🍺 ' + e : '';
+  var hay = p && (e || t);
+  d.style.display = hay ? 'block' : 'none';
+  d.innerHTML = hay ? '🍺 <b>' + esc(e || p) + '</b>' + (t ? '<br>' + esc(t) : '') : '';
 }
 function extraerCodigo(t) {
   t = String(t || '').trim();
