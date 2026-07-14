@@ -67,7 +67,7 @@
 </style>
 </head>
 <body>
-<header><h1>🛢️ Kegs Hammurabier</h1></header>
+<header onclick="volverAlMenu()" style="cursor:pointer"><h1>🛢️ Kegs Hammurabier <span style="float:right;font-size:13px;font-weight:600;opacity:.85">🏠 Menú</span></h1></header>
 <nav>
   <button id="navEsc" class="activa" onclick="verTab('esc')">Escanear</button>
   <button id="navKegs" onclick="verTab('kegs')">Kegs</button>
@@ -572,6 +572,17 @@ function terminarSiActivo_() {
   if (MODO) { MODO = null; cerrarCamara(); msg(); vista('modos'); }
 }
 
+// volver al menu principal desde cualquier lado (titulo de la app)
+function volverAlMenu() {
+  MODO = null;
+  cerrarCamara();
+  msg(); msgHome();
+  document.getElementById('card').innerHTML = '';
+  document.getElementById('codManual').value = '';
+  vista('modos');
+  verTab('esc');
+}
+
 function pintarCarta() {
   var k = KEG, sug = SUGERIDA[k.estado] || '';
   var d = [];
@@ -627,6 +638,7 @@ function pintarCarta() {
         '<label>Notas (opcional)</label><input id="fNotasEv" autocomplete="off">' +
         '<div class="fila"><button class="btn" onclick="guardar(\'EVENTO\')">Enviar a evento</button></div>' +
       '</form>' +
+      '<div class="fila"><button class="btn gris" style="flex:1" onclick="volverAlMenu()">← Volver al menú</button></div>' +
     '</div>';
 }
 
