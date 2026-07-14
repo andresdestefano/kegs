@@ -246,18 +246,34 @@ function elegirModo(a) {
   document.getElementById('card').innerHTML = '';
   msgHome();
   if (a === 'LLENAR') {
-    if (!DATOS.fermentadores.length) { msgHome('error', 'No hay fermentadores activos. Registra uno en la pestaña Fermentadores.'); return; }
     var op = DATOS.fermentadores.map(function(f, i) {
       var e = estiloDe(f.producto);
       return '<option value="' + i + '">' + esc(f.fermentador) + ' — ' + esc(f.producto) + (e ? ' · ' + esc(e) : '') + ' (lote ' + esc(f.lote) + ')</option>';
     }).join('');
-    pintarParams('🍺 Llenar barriles',
-      '<label>Fermentador de origen</label><select id="pFerm"><option value="">— elegir —</option>' + op + '</select>',
+    var opProd = DATOS.productosCat.map(function(p) { return '<option value="' + esc(p) + '">' + esc(p) + '</option>'; }).join('');
+    var cuerpo = (DATOS.fermentadores.length
+        ? '<label>Fermentador de origen</label><select id="pFerm"><option value="">— elegir —</option>' + op + '</select>'
+        : '<div class="aviso info" style="display:block">No hay fermentadores activos.</div>') +
+      '<div style="border-top:1px solid #eee;margin-top:12px;padding-top:8px">' +
+        '<label>🛠 Corrección de llenado (sin fermentador)</label>' +
+        '<select id="pProdCorr"><option value="">— producto —</option>' + opProd + '</select>' +
+        '<label>Lote (opcional)</label><input id="pLoteCorr" autocomplete="off" placeholder="L2614101">' +
+      '</div>';
+    pintarParams('🍺 Llenar barriles', cuerpo,
       function() {
-        var i = document.getElementById('pFerm').value;
-        if (i === '') { alert('Elige el fermentador de origen.'); return null; }
-        var f = DATOS.fermentadores[Number(i)];
-        return { producto: f.producto, lote: f.lote, _txt: f.fermentador + ' · ' + f.producto + ' (lote ' + f.lote + ')' };
+        var i = document.getElementById('pFerm') ? document.getElementById('pFerm').value : '';
+        var pc = document.getElementById('pProdCorr').value;
+        if (i !== '' && pc) { alert('Elige solo una via: fermentador O correccion.'); return null; }
+        if (i !== '') {
+          var f = DATOS.fermentadores[Number(i)];
+          return { producto: f.producto, lote: f.lote, _txt: f.fermentador + ' · ' + f.producto + ' (lote ' + f.lote + ')' };
+        }
+        if (pc) {
+          var lc = document.getElementById('pLoteCorr').value.trim().toUpperCase();
+          return { producto: pc, lote: lc, correccion: 1, _txt: pc + (lc ? ' (lote ' + lc + ')' : '') + ' · corrección' };
+        }
+        alert('Elige el fermentador de origen, o el producto para corrección.');
+        return null;
       });
   } else if (a === 'ENTREGAR') {
     pintarParams('🚚 Entregar barriles',
@@ -383,6 +399,7 @@ function procesarLectura(texto, esManual) {
   if (MODO.extra.lote)      d.lote      = MODO.extra.lote;
   if (MODO.extra.cliente)   d.cliente   = MODO.extra.cliente;
   if (MODO.extra.ubicacion) d.ubicacion = MODO.extra.ubicacion;
+  if (MODO.extra.correccion) d.correccion = 1;
   api('kegAccion', d).then(function(r) {
     OCUPADO = false;
     if (!MODO) return;
@@ -571,11 +588,15 @@ function pintarCarta() {
     var e = estiloDe(f.producto);
     return '<option value="' + i + '">' + esc(f.fermentador) + ' — ' + esc(f.producto) + (e ? ' · ' + esc(e) : '') + ' (lote ' + esc(f.lote) + ')</option>';
   }).join('');
-  var cuerpoLlenar = DATOS.fermentadores.length
-    ? '<label>Fermentador de origen</label><select id="fFerm"><option value="">— elegir —</option>' + opFerm + '</select>' +
-      '<label>Notas (opcional)</label><input id="fNotasL" autocomplete="off">' +
-      '<div class="fila"><button class="btn" onclick="guardar(\'LLENAR\')">Guardar llenado</button></div>'
-    : '<div class="aviso error" style="display:block">No hay fermentadores activos. Registra uno en Fermentadores.</div>';
+  var opProdC = DATOS.productosCat.map(function(p) { return '<option value="' + esc(p) + '">' + esc(p) + '</option>'; }).join('');
+  var cuerpoLlenar = (DATOS.fermentadores.length
+      ? '<label>Fermentador de origen</label><select id="fFerm"><option value="">— elegir —</option>' + opFerm + '</select>'
+      : '<div class="aviso info" style="display:block">No hay fermentadores activos.</div>') +
+    '<label style="margin-top:10px">🛠 o corrección de llenado (sin fermentador)</label>' +
+    '<select id="fProdCorr"><option value="">— producto —</option>' + opProdC + '</select>' +
+    '<label>Lote de la corrección (opcional)</label><input id="fLoteCorr" autocomplete="off">' +
+    '<label>Notas (opcional)</label><input id="fNotasL" autocomplete="off">' +
+    '<div class="fila"><button class="btn" onclick="guardar(\'LLENAR\')">Guardar llenado</button></div>';
   document.getElementById('card').innerHTML =
     '<div class="carta">' +
       '<h2>' + esc(k.codigo) + ' <span class="chip ' + esc(k.estado) + '">' + esc(k.estado) + '</span></h2>' +
@@ -636,10 +657,17 @@ function guardar(a) {
   var d = { codigo: KEG.codigo, accion: a };
   if (a === 'LLENAR') {
     var i = document.getElementById('fFerm') ? document.getElementById('fFerm').value : '';
-    if (i === '') { alert('Elige el fermentador de origen.'); return; }
-    var f = DATOS.fermentadores[Number(i)];
-    if (!f) { alert('Fermentador no válido.'); return; }
-    d.producto = f.producto; d.lote = f.lote;
+    var pc = document.getElementById('fProdCorr').value;
+    if (i !== '' && pc) { alert('Elige solo una vía: fermentador O corrección.'); return; }
+    if (i !== '') {
+      var f = DATOS.fermentadores[Number(i)];
+      if (!f) { alert('Fermentador no válido.'); return; }
+      d.producto = f.producto; d.lote = f.lote;
+    } else if (pc) {
+      d.producto = pc;
+      d.lote = document.getElementById('fLoteCorr').value.trim().toUpperCase();
+      d.correccion = 1;
+    } else { alert('Elige el fermentador de origen, o el producto para corrección.'); return; }
     d.notas = document.getElementById('fNotasL').value.trim();
   } else if (a === 'ENTREGAR') {
     d.cliente = document.getElementById('fCliente').value.trim();
