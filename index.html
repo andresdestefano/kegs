@@ -320,6 +320,7 @@ function iniciarModo(a, extra) {
   pintarBannerModo();
   msg('info', a === 'REVISAR' ? 'Escanea un barril para ver su estado.' : 'Escanea los barriles uno tras otro.');
   vista('scan');
+  prepararAudio();   // se activa con el toque del usuario (requisito del navegador)
   abrirCamara();
 }
 
@@ -394,7 +395,30 @@ function procesarLectura(texto, esManual) {
   }).catch(function(e) { OCUPADO = false; msg('error', 'Error de conexión: ' + e.message); });
 }
 
-function pip(ok) { if (navigator.vibrate) navigator.vibrate(ok ? 80 : [60, 60, 120]); }
+// bip + vibracion al leer un codigo
+var AUDIO = null;
+function prepararAudio() {
+  try {
+    if (!AUDIO) AUDIO = new (window.AudioContext || window.webkitAudioContext)();
+    if (AUDIO.state === 'suspended') AUDIO.resume();
+  } catch (e) { AUDIO = null; }
+}
+function tono_(freq, inicio, dur) {
+  var o = AUDIO.createOscillator(), g = AUDIO.createGain();
+  o.type = 'square'; o.frequency.value = freq;
+  g.gain.setValueAtTime(0.25, AUDIO.currentTime + inicio);
+  g.gain.exponentialRampToValueAtTime(0.001, AUDIO.currentTime + inicio + dur);
+  o.connect(g); g.connect(AUDIO.destination);
+  o.start(AUDIO.currentTime + inicio); o.stop(AUDIO.currentTime + inicio + dur + 0.02);
+}
+function pip(ok) {
+  if (navigator.vibrate) navigator.vibrate(ok ? 80 : [60, 60, 120]);
+  if (!AUDIO) return;
+  try {
+    if (ok) { tono_(1200, 0, 0.12); }
+    else { tono_(300, 0, 0.15); tono_(220, 0.18, 0.2); }
+  } catch (e) {}
+}
 function feed(ok, cod, texto) { feedHtml(ok ? 'bueno' : 'malo', cod, esc(texto), ok ? '✅' : '⛔'); }
 function feedHtml(clase, cod, detHtml, extremo) {
   var el = document.createElement('div');
