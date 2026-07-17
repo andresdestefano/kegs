@@ -120,11 +120,18 @@
 </main>
 
 <main id="tabKegs" style="display:none">
-  <div class="contadores" id="contadores"></div>
-  <div class="fila" style="margin-top:0">
-    <input id="filtro" placeholder="Buscar código, cliente o producto" oninput="pintarLista()" autocomplete="off">
-    <button class="btn gris" onclick="cargarResumen(true)">↻</button>
+  <div class="contadores" style="margin-bottom:8px">
+    <button id="vbBarriles" class="activa" onclick="ponerVistaKegs('barriles')">Barriles</button>
+    <button id="vbInventario" onclick="ponerVistaKegs('inventario')">📊 Por producto</button>
   </div>
+  <div id="vistaBarriles">
+    <div class="contadores" id="contadores"></div>
+    <div class="fila" style="margin-top:0">
+      <input id="filtro" placeholder="Buscar código, cliente o producto" oninput="pintarLista()" autocomplete="off">
+      <button class="btn gris" onclick="cargarResumen(true)">↻</button>
+    </div>
+  </div>
+  <div id="vistaInventario" style="display:none"></div>
   <div class="cargando" id="cargKegs">⏳ Cargando kegs…</div>
   <div id="lista"></div>
 </main>
@@ -760,14 +767,56 @@ function fermVaciar(tanque, lote) {
 }
 
 // ========== pestaña Kegs ==========
+var VISTA_KEGS = 'barriles';
+function ponerVistaKegs(v) {
+  VISTA_KEGS = v;
+  document.getElementById('vbBarriles').classList.toggle('activa', v === 'barriles');
+  document.getElementById('vbInventario').classList.toggle('activa', v === 'inventario');
+  document.getElementById('vistaBarriles').style.display = (v === 'barriles') ? '' : 'none';
+  document.getElementById('vistaInventario').style.display = (v === 'inventario') ? '' : 'none';
+  if (v === 'inventario') { document.getElementById('lista').innerHTML = ''; pintarInventario(); }
+  else pintarLista();
+}
+function verProducto(p) {
+  ponerVistaKegs('barriles');
+  FILTRO_ESTADO = '';
+  document.getElementById('filtro').value = p;
+  pintarContadores(); pintarLista();
+}
+function pintarInventario() {
+  if (!RESUMEN) { cargarResumen(false); return; }
+  var por = {};
+  RESUMEN.forEach(function(k) {
+    if (!k.producto) return;
+    var g = por[k.producto] = por[k.producto] || { lleno: 0, litros: 0, entregado: 0, evento: 0 };
+    if (k.estado === 'LLENO') { g.lleno++; g.litros += Number(k.capacidad) || 0; }
+    else if (k.estado === 'ENTREGADO') g.entregado++;
+    else if (k.estado === 'EVENTO') g.evento++;
+  });
+  var productos = Object.keys(por).sort(function(a, b) { return por[b].lleno - por[a].lleno; });
+  var totL = 0, totLitros = 0, totE = 0;
+  productos.forEach(function(p) { totL += por[p].lleno; totLitros += por[p].litros; totE += por[p].entregado + por[p].evento; });
+  var html = '<div class="banner" style="margin-bottom:10px">🍺 En planta: <b>' + totL + '</b> barril(es) llenos · <b>' + totLitros + ' L</b> · fuera: <b>' + totE + '</b></div>';
+  html += productos.map(function(p) {
+    var g = por[p], e = estiloDe(p);
+    var det = '🟢 ' + g.lleno + ' lleno(s)' + (g.litros ? ' · ' + g.litros + ' L' : '');
+    det += '<br>🔵 ' + g.entregado + ' con clientes' + (g.evento ? ' · 🟣 ' + g.evento + ' en evento' : '');
+    return '<div class="item" onclick="verProducto(\'' + esc(p) + '\')">' +
+      '<div class="det"><b>' + esc(p) + '</b>' + (e ? ' — ' + esc(e) : '') + '<br>' + det + '</div>' +
+      '<span class="chip LLENO">' + g.lleno + '</span></div>';
+  }).join('');
+  if (!productos.length) html += '<div class="cargando" style="display:block">Sin barriles con producto.</div>';
+  document.getElementById('vistaInventario').innerHTML = html;
+}
 function cargarResumen(forzar) {
-  if (RESUMEN && !forzar) { pintarLista(); return; }
+  if (RESUMEN && !forzar) { (VISTA_KEGS === 'inventario') ? pintarInventario() : pintarLista(); return; }
   document.getElementById('cargKegs').style.display = 'block';
   document.getElementById('lista').innerHTML = '';
   api('kegResumen').then(function(r) {
     document.getElementById('cargKegs').style.display = 'none';
     if (!r.ok) return;
-    RESUMEN = r.kegs; pintarContadores(); pintarLista();
+    RESUMEN = r.kegs; pintarContadores();
+    (VISTA_KEGS === 'inventario') ? pintarInventario() : pintarLista();
   });
 }
 function pintarContadores() {
