@@ -176,15 +176,26 @@ function api(fn, datos) {
   return fetch(url).then(function(r) { return r.json(); });
 }
 
-// ---------- arranque ----------
-api('kegDatos').then(function(r) {
-  if (r && r.ok) {
-    DATOS = r;
-    var dl = document.getElementById('dlClientes');
-    r.clientes.forEach(function(c) { var o = document.createElement('option'); o.value = c; dl.appendChild(o); });
-    pintarFerm();
-  }
-});
+// ---------- arranque (con reintento: en señal lenta no puede quedar vacío) ----------
+var DATOS_OK = false;
+function cargarDatos(cb) {
+  api('kegDatos').then(function(r) {
+    if (r && r.ok) {
+      DATOS = r;
+      DATOS_OK = true;
+      var dl = document.getElementById('dlClientes');
+      dl.innerHTML = '';
+      r.clientes.forEach(function(c) { var o = document.createElement('option'); o.value = c; dl.appendChild(o); });
+      pintarFerm();
+      if (cb) cb(true);
+    } else {
+      setTimeout(function() { cargarDatos(cb); }, 3000);
+    }
+  }).catch(function() {
+    setTimeout(function() { cargarDatos(cb); }, 3000);
+  });
+}
+cargarDatos();
 document.getElementById('codManual').addEventListener('keydown', function(ev) {
   if (ev.key === 'Enter') { ev.preventDefault(); manual(); }
 });
@@ -245,6 +256,12 @@ function vista(v) {
 function elegirModo(a) {
   document.getElementById('card').innerHTML = '';
   msgHome();
+  // si los datos aun no bajaron (senal lenta), esperar y reabrir solo
+  if ((a === 'LLENAR' || a === 'ENTREGAR') && !DATOS_OK) {
+    msgHome('info', '⏳ Cargando productos y clientes… un momento.');
+    cargarDatos(function() { msgHome(); elegirModo(a); });
+    return;
+  }
   if (a === 'LLENAR') {
     var op = DATOS.fermentadores.map(function(f, i) {
       var e = estiloDe(f.producto);
