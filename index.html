@@ -646,7 +646,7 @@ function bloqueada_(a, estado) {
   if (a === 'LLENAR') return estado !== 'VACIO';
   if (a === 'ENTREGAR') return estado !== 'LLENO';
   if (a === 'RECOGER') return estado !== 'ENTREGADO' && estado !== 'EVENTO';
-  if (a === 'LAVAR') return estado !== 'SUCIO';
+  if (a === 'LAVAR') return estado !== 'SUCIO' && estado !== 'VACIO';
   if (a === 'DEPOSITO') return estado === 'ENTREGADO' || estado === 'EVENTO';
   if (a === 'EVENTO') return estado !== 'LLENO';
   return false;
