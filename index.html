@@ -662,6 +662,12 @@ function pintarCarta() {
         '<label>Notas (opcional)</label><input id="fNotasEv" autocomplete="off">' +
         '<div class="fila"><button class="btn" onclick="guardar(\'EVENTO\')">Enviar a evento</button></div>' +
       '</form>' +
+      '<div style="border-top:1px solid #eee;margin-top:14px;padding-top:10px">' +
+        '<label>⚙️ Cambio manual de estado (correcciones)</label>' +
+        '<select id="fDestino"><option value="">— elegir —</option><option value="SUCIO">Marcar SUCIO</option><option value="VACIO">Marcar VACÍO</option></select>' +
+        '<label>Nota (por qué se corrige)</label><input id="fNotaManual" autocomplete="off" placeholder="ej. cerveza descartada">' +
+        '<div class="fila"><button class="btn rojo" onclick="guardarManual()">Aplicar cambio manual</button></div>' +
+      '</div>' +
       '<div class="fila"><button class="btn gris" style="flex:1" onclick="volverAlMenu()">← Volver al menú</button></div>' +
     '</div>';
 }
@@ -721,6 +727,19 @@ function guardar(a) {
     d.notas = document.getElementById('fNotasEv').value.trim();
     if (!d.ubicacion) { alert('Escribe el nombre del evento.'); return; }
   }
+  document.getElementById('cargEsc').style.display = 'block';
+  api('kegAccion', d).then(function(r) {
+    document.getElementById('cargEsc').style.display = 'none';
+    if (!r.ok) { msgHome('error', r.error); return; }
+    KEG = r.keg; RESUMEN = null; pintarCarta(); msgHome('ok', '✅ ' + r.mensaje);
+  }).catch(function(e) { document.getElementById('cargEsc').style.display = 'none'; msgHome('error', 'Error: ' + e.message); });
+}
+
+function guardarManual() {
+  var destino = document.getElementById('fDestino').value;
+  if (!destino) { alert('Elige el estado destino.'); return; }
+  if (!confirm(KEG.codigo + ' está ' + KEG.estado + '. ¿Cambiarlo manualmente a ' + destino + '? Se borra producto/cliente del barril.')) return;
+  var d = { codigo: KEG.codigo, accion: 'ESTADO_MANUAL', destino: destino, notas: document.getElementById('fNotaManual').value.trim() };
   document.getElementById('cargEsc').style.display = 'block';
   api('kegAccion', d).then(function(r) {
     document.getElementById('cargEsc').style.display = 'none';
