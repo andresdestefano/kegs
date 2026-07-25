@@ -300,12 +300,13 @@ function elegirModo(a) {
         return null;
       });
   } else if (a === 'ENTREGAR') {
+    var opCli = DATOS.clientes.map(function(c) { return '<option value="' + esc(c) + '">' + esc(c) + '</option>'; }).join('');
     pintarParams('🚚 Entregar barriles',
-      '<label>Cliente (de la base CRM)</label><input id="pCliente" list="dlClientes" autocomplete="off" placeholder="Empieza a escribir…">' +
+      '<label>Cliente (de la base CRM)</label><select id="pCliente"><option value="">— elegir cliente —</option>' + opCli + '</select>' +
       '<label>Ubicación / sucursal (opcional)</label><input id="pUbi" autocomplete="off">',
       function() {
-        var cli = document.getElementById('pCliente').value.trim();
-        if (!DATOS.clientes.some(function(x) { return x.toLowerCase() === cli.toLowerCase(); })) { alert('El cliente debe existir en la base del CRM.'); return null; }
+        var cli = document.getElementById('pCliente').value;
+        if (!cli) { alert('Elige el cliente.'); return null; }
         var ubi = document.getElementById('pUbi').value.trim();
         return { cliente: cli, ubicacion: ubi, _txt: cli + (ubi ? ' — ' + ubi : '') };
       });
@@ -639,7 +640,7 @@ function pintarCarta() {
       '<div class="acciones">' + botones + '</div>' +
       '<form class="fAccion" id="fLLENAR" onsubmit="return false">' + cuerpoLlenar + '</form>' +
       '<form class="fAccion" id="fENTREGAR" onsubmit="return false">' +
-        '<label>Cliente (de la base CRM)</label><input id="fCliente" list="dlClientes" autocomplete="off" placeholder="Empieza a escribir…">' +
+        '<label>Cliente (de la base CRM)</label><select id="fCliente"><option value="">— elegir cliente —</option>' + DATOS.clientes.map(function(c) { return '<option value="' + esc(c) + '">' + esc(c) + '</option>'; }).join('') + '</select>' +
         '<label>Ubicación / sucursal (opcional)</label><input id="fUbicacion" autocomplete="off">' +
         '<label>Notas (opcional)</label><input id="fNotasE" autocomplete="off">' +
         '<div class="fila"><button class="btn" onclick="guardar(\'ENTREGAR\')">Guardar entrega</button></div>' +
@@ -712,10 +713,10 @@ function guardar(a) {
     } else { alert('Elige el fermentador de origen, o el producto para corrección.'); return; }
     d.notas = document.getElementById('fNotasL').value.trim();
   } else if (a === 'ENTREGAR') {
-    d.cliente = document.getElementById('fCliente').value.trim();
+    d.cliente = document.getElementById('fCliente').value;
     d.ubicacion = document.getElementById('fUbicacion').value.trim();
     d.notas = document.getElementById('fNotasE').value.trim();
-    if (!DATOS.clientes.some(function(c) { return c.toLowerCase() === d.cliente.toLowerCase(); })) { alert('El cliente debe existir en la base del CRM.'); return; }
+    if (!d.cliente) { alert('Elige el cliente.'); return; }
   } else if (a === 'RECOGER') { d.notas = document.getElementById('fNotasR').value.trim(); }
   else if (a === 'LAVAR') { d.notas = document.getElementById('fNotasV').value.trim(); }
   else if (a === 'DEPOSITO') {
