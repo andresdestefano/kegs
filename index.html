@@ -428,7 +428,12 @@ function procesarLectura(texto, esManual) {
   api('kegAccion', d).then(function(r) {
     OCUPADO = false;
     if (!MODO) return;
-    if (!r.ok) { MODO.errores++; pip(false); feed(false, cod, r.error); pintarBannerModo(); return; }
+    if (!r.ok) {
+      MODO.errores++; pip(false);
+      if (r.estado) feedHtml('malo', cod, 'Estatus del keg: <span class="chip ' + esc(r.estado) + '">' + esc(r.estado) + '</span>', '⛔');
+      else feed(false, cod, r.error);
+      pintarBannerModo(); return;
+    }
     MODO.hechos.push(r.keg.codigo);
     RESUMEN = null;
     pip(true);
