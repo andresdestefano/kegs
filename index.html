@@ -303,7 +303,9 @@ function elegirModo(a) {
     var opCli = DATOS.clientes.map(function(c) { return '<option value="' + esc(c) + '">' + esc(c) + '</option>'; }).join('');
     pintarParams('🚚 Entregar barriles',
       '<label>Cliente (de la base CRM)</label><select id="pCliente"><option value="">— elegir cliente —</option>' + opCli + '</select>' +
-      '<label>Ubicación / sucursal (opcional)</label><input id="pUbi" autocomplete="off">',
+      '<label>Ubicación / sucursal (opcional)</label><input id="pUbi" autocomplete="off">' +
+      '<button type="button" class="btn gris" style="width:100%;margin-top:10px" onclick="toggleCP(\'p\')">➕ Cliente personal nuevo</button>' +
+      '<div id="pCP" style="display:none">' + camposCP('p') + '</div>',
       function() {
         var cli = document.getElementById('pCliente').value;
         if (!cli) { alert('Elige el cliente.'); return null; }
@@ -649,6 +651,8 @@ function pintarCarta() {
         '<label>Ubicación / sucursal (opcional)</label><input id="fUbicacion" autocomplete="off">' +
         '<label>Notas (opcional)</label><input id="fNotasE" autocomplete="off">' +
         '<div class="fila"><button class="btn" onclick="guardar(\'ENTREGAR\')">Guardar entrega</button></div>' +
+        '<button type="button" class="btn gris" style="width:100%;margin-top:8px" onclick="toggleCP(\'f\')">➕ Cliente personal nuevo</button>' +
+        '<div id="fCP" style="display:none">' + camposCP('f') + '</div>' +
       '</form>' +
       '<form class="fAccion" id="fRECOGER" onsubmit="return false">' +
         '<label>Notas (opcional)</label><input id="fNotasR" autocomplete="off">' +
@@ -739,6 +743,43 @@ function guardar(a) {
     if (!r.ok) { msgHome('error', r.error); return; }
     KEG = r.keg; RESUMEN = null; pintarCarta(); msgHome('ok', '✅ ' + r.mensaje);
   }).catch(function(e) { document.getElementById('cargEsc').style.display = 'none'; msgHome('error', 'Error: ' + e.message); });
+}
+
+// ---- registro rapido de cliente personal (nombre, cedula, telefono, contrato) ----
+function camposCP(pref) {
+  return '<div style="border-top:1px solid #eee;margin-top:8px;padding-top:4px">' +
+    '<label>Nombre completo</label><input id="' + pref + 'cpNombre" autocomplete="off">' +
+    '<label>Cédula</label><input id="' + pref + 'cpCedula" autocomplete="off" inputmode="numeric">' +
+    '<label>Teléfono</label><input id="' + pref + 'cpTel" autocomplete="off" inputmode="tel">' +
+    '<label>¿Se hizo contrato?</label><select id="' + pref + 'cpContrato"><option value="NO">No</option><option value="SI">Sí</option></select>' +
+    '<div class="fila"><button type="button" class="btn" onclick="guardarClientePersonal(\'' + pref + '\')">Guardar cliente</button></div>' +
+    '</div>';
+}
+function toggleCP(pref) {
+  var el = document.getElementById(pref + 'CP');
+  el.style.display = (el.style.display === 'none') ? '' : 'none';
+}
+function guardarClientePersonal(pref) {
+  var d = {
+    nombre: document.getElementById(pref + 'cpNombre').value.trim(),
+    cedula: document.getElementById(pref + 'cpCedula').value.trim(),
+    telefono: document.getElementById(pref + 'cpTel').value.trim(),
+    contrato: document.getElementById(pref + 'cpContrato').value
+  };
+  if (!d.nombre || !d.cedula) { alert('Nombre y cédula son obligatorios.'); return; }
+  document.getElementById('cargEsc').style.display = 'block';
+  api('kegClientePersonal', d).then(function(r) {
+    document.getElementById('cargEsc').style.display = 'none';
+    if (!r.ok) { alert(r.error); return; }
+    DATOS.clientes = r.clientes;
+    var op = '<option value="">— elegir cliente —</option>' + DATOS.clientes.map(function(c) { return '<option value="' + esc(c) + '">' + esc(c) + '</option>'; }).join('');
+    ['pCliente', 'fCliente'].forEach(function(id) {
+      var s = document.getElementById(id);
+      if (s) { s.innerHTML = op; s.value = r.cliente; }
+    });
+    toggleCP(pref);
+    msgHome('ok', '✅ ' + r.mensaje);
+  }).catch(function(e) { document.getElementById('cargEsc').style.display = 'none'; alert('Error: ' + e.message); });
 }
 
 function guardarManual() {
