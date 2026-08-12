@@ -47,6 +47,7 @@
   .chip { font-size: 12px; font-weight: 700; color: #fff; padding: 3px 10px; border-radius: 999px; }
   .chip.LLENO { background: var(--lleno); } .chip.ENTREGADO { background: var(--entregado); }
   .chip.SUCIO { background: var(--sucio); } .chip.VACIO { background: var(--vacio); }
+  .chip.LIMPIO { background: #00897b; }
   .chip.EVENTO { background: var(--evento); }
   .datos { margin-top: 8px; font-size: 14.5px; line-height: 1.55; color: #444; }
   .acciones { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 12px; }
@@ -161,7 +162,7 @@ var API = 'https://script.google.com/macros/s/AKfycbznp6ECYaCj3UOo0MwJAGuuVSGFhn
 
 var DATOS = { clientes: [], productosCat: [], tanques: [], fermentadores: [] };
 var KEG = null, RESUMEN = null, FILTRO_ESTADO = '';
-var SUGERIDA = { VACIO: 'LLENAR', LLENO: 'ENTREGAR', ENTREGADO: 'RECOGER', EVENTO: 'RECOGER', SUCIO: 'LAVAR' };
+var SUGERIDA = { LIMPIO: 'LLENAR', VACIO: 'LLENAR', LLENO: 'ENTREGAR', ENTREGADO: 'RECOGER', EVENTO: 'RECOGER', SUCIO: 'LAVAR' };
 var NOMBRE_ACCION = { LLENAR: 'Llenar', ENTREGAR: 'Entregar', RECOGER: 'Devolver', LAVAR: 'Limpiar', DEPOSITO: 'A depósito', EVENTO: 'A evento' };
 var MODOS = {
   LLENAR:   { ic: '🍺', nombre: 'Llenar' },
@@ -660,7 +661,7 @@ function pintarCarta() {
       '</form>' +
       '<form class="fAccion" id="fLAVAR" onsubmit="return false">' +
         '<label>Notas (opcional)</label><input id="fNotasV" autocomplete="off">' +
-        '<div class="fila"><button class="btn" onclick="guardar(\'LAVAR\')">Confirmar limpieza (queda VACÍO)</button></div>' +
+        '<div class="fila"><button class="btn" onclick="guardar(\'LAVAR\')">Confirmar limpieza (queda LIMPIO)</button></div>' +
       '</form>' +
       '<form class="fAccion" id="fDEPOSITO" onsubmit="return false">' +
         '<label>Nombre del depósito</label><input id="fDep" autocomplete="off">' +
@@ -674,7 +675,7 @@ function pintarCarta() {
       '</form>' +
       '<div style="border-top:1px solid #eee;margin-top:14px;padding-top:10px">' +
         '<label>⚙️ Cambio manual de estado (correcciones)</label>' +
-        '<select id="fDestino"><option value="">— elegir —</option><option value="SUCIO">Marcar SUCIO</option><option value="VACIO">Marcar VACÍO</option></select>' +
+        '<select id="fDestino"><option value="">— elegir —</option><option value="SUCIO">Marcar SUCIO</option><option value="LIMPIO">Marcar LIMPIO</option></select>' +
         '<label>Nota (por qué se corrige)</label><input id="fNotaManual" autocomplete="off" placeholder="ej. cerveza descartada">' +
         '<div class="fila"><button class="btn rojo" onclick="guardarManual()">Aplicar cambio manual</button></div>' +
       '</div>' +
@@ -683,10 +684,10 @@ function pintarCarta() {
 }
 
 function bloqueada_(a, estado) {
-  if (a === 'LLENAR') return estado !== 'VACIO';
+  if (a === 'LLENAR') return estado !== 'LIMPIO' && estado !== 'VACIO';
   if (a === 'ENTREGAR') return estado !== 'LLENO';
   if (a === 'RECOGER') return estado !== 'ENTREGADO' && estado !== 'EVENTO';
-  if (a === 'LAVAR') return estado !== 'SUCIO' && estado !== 'VACIO';
+  if (a === 'LAVAR') return estado !== 'SUCIO' && estado !== 'LIMPIO' && estado !== 'VACIO';
   if (a === 'DEPOSITO') return estado === 'ENTREGADO' || estado === 'EVENTO';
   if (a === 'EVENTO') return estado !== 'LLENO';
   return false;
@@ -886,9 +887,9 @@ function cargarResumen(forzar) {
   });
 }
 function pintarContadores() {
-  var c = { '': RESUMEN.length, LLENO: 0, ENTREGADO: 0, EVENTO: 0, SUCIO: 0, VACIO: 0 };
+  var c = { '': RESUMEN.length, LLENO: 0, ENTREGADO: 0, EVENTO: 0, SUCIO: 0, LIMPIO: 0 };
   RESUMEN.forEach(function(k) { if (c[k.estado] != null) c[k.estado]++; });
-  var pares = [['', 'Todos'], ['LLENO', 'Llenos'], ['ENTREGADO', 'Entregados'], ['EVENTO', 'En evento'], ['SUCIO', 'Sucios'], ['VACIO', 'Vacíos']];
+  var pares = [['', 'Todos'], ['LLENO', 'Llenos'], ['ENTREGADO', 'Entregados'], ['EVENTO', 'En evento'], ['SUCIO', 'Sucios'], ['LIMPIO', 'Limpios']];
   document.getElementById('contadores').innerHTML = pares.map(function(par) {
     if (par[0] === 'EVENTO' && !c.EVENTO) return '';
     return '<button class="' + (FILTRO_ESTADO === par[0] ? 'activa' : '') + '" onclick="FILTRO_ESTADO=\'' + par[0] + '\';pintarContadores();pintarLista()">' + par[1] + ' (' + c[par[0]] + ')</button>';
