@@ -111,7 +111,7 @@
       <button class="btn rojo" style="flex:1" onclick="terminarModo()">✔ Terminar</button>
     </div>
     <div class="aviso" id="msg"></div>
-    <div id="feed"></div>
+    <div id="ultimo"></div>
   </div>
 
   <!-- Resumen final + carta de un keg (toque en lista o enlace directo) -->
@@ -357,9 +357,10 @@ function confirmarParams() {
 }
 
 function iniciarModo(a, extra) {
-  MODO = { accion: a, extra: extra, hechos: [], errores: 0 };
+  MODO = { accion: a, extra: extra, registros: [], hechos: 0, errores: 0 };
   RECIENTES = {};
-  document.getElementById('feed').innerHTML = '';
+  COLA = [];
+  document.getElementById('ultimo').innerHTML = '';
   document.getElementById('codManual').value = '';
   pintarBannerModo();
   msg('info', a === 'REVISAR' ? 'Escanea un barril para ver su estado.' : 'Escanea los barriles uno tras otro.');
@@ -369,23 +370,49 @@ function iniciarModo(a, extra) {
 }
 
 function pintarBannerModo() {
+  if (!MODO) return;
   var m = MODOS[MODO.accion];
   var det = MODO.extra._txt ? ' → <b>' + esc(MODO.extra._txt) + '</b>' : '';
-  var n = MODO.accion === 'REVISAR' ? '' : ' · <b>' + MODO.hechos.length + '</b> ✔' + (MODO.errores ? ' · ' + MODO.errores + ' ⛔' : '');
+  var n = '';
+  if (MODO.accion !== 'REVISAR') {
+    n = ' · <b>' + MODO.hechos + '</b> ✔' + (MODO.errores ? ' · ' + MODO.errores + ' ⛔' : '');
+    var pend = COLA.length + (ENVIANDO ? 1 : 0);
+    if (pend) n += ' · ⏳' + pend;
+  }
   document.getElementById('banModo').innerHTML = m.ic + ' <b>' + m.nombre + '</b>' + det + n;
 }
+function pintarUltimo(html) { document.getElementById('ultimo').innerHTML = html; }
 
 function terminarModo() {
+  if (!MODO) { vista('modos'); return; }
+  // si quedan envios pendientes, esperar a que terminen
+  if (MODO.accion !== 'REVISAR' && (COLA.length || ENVIANDO)) {
+    msg('info', '⏳ Guardando los últimos ' + (COLA.length + (ENVIANDO ? 1 : 0)) + '…');
+    setTimeout(terminarModo, 800);
+    return;
+  }
   cerrarCamara();
-  var a = MODO ? MODO.accion : '';
-  if (MODO && a !== 'REVISAR') {
-    var n = MODO.hechos.length;
-    msgHome(n ? 'ok' : 'info', (n ? '✅ ' : '') + MODOS[a].nombre + ': ' + n + ' barril(es)' +
-      (n ? ' — ' + MODO.hechos.join(', ') : '') + (MODO.errores ? ' · ' + MODO.errores + ' rechazado(s)' : '') + '.');
-  } else { msgHome(); }
+  var a = MODO.accion, regs = MODO.registros, hechos = MODO.hechos, errores = MODO.errores;
   MODO = null;
-  msg();
+  msg(); msgHome();
+  document.getElementById('ultimo').innerHTML = '';
   vista('modos');
+  if (a === 'REVISAR' || !regs.length) return;
+  // tabla de lo que se hizo en la tanda
+  var filas = regs.map(function(g) {
+    return '<tr style="border-bottom:1px solid #eee"><td style="padding:7px 8px;font-weight:700">' + esc(g.codigo) + '</td>' +
+      '<td style="padding:7px 8px">' + (g.ok ? '✅ ' + esc(g.texto) : '⛔ ' + (g.estado ? 'Estatus: ' + esc(g.estado) : esc(g.texto))) + '</td></tr>';
+  }).join('');
+  document.getElementById('vModos').style.display = 'none';
+  document.getElementById('card').innerHTML =
+    '<div class="carta"><h2 style="font-size:18px">' + MODOS[a].ic + ' ' + esc(MODOS[a].nombre) + ' — resumen</h2>' +
+    '<div class="datos"><b>' + hechos + '</b> realizado(s)' + (errores ? ' · <b>' + errores + '</b> rechazado(s)' : '') + '</div>' +
+    '<table style="width:100%;border-collapse:collapse;margin-top:8px;font-size:14px">' + filas + '</table>' +
+    '<div class="fila"><button class="btn" style="flex:1" onclick="cerrarResumen()">OK</button></div></div>';
+}
+function cerrarResumen() {
+  document.getElementById('card').innerHTML = '';
+  document.getElementById('vModos').style.display = '';
 }
 
 function manual() {
@@ -395,7 +422,8 @@ function manual() {
   procesarLectura(t, true);
 }
 
-// un escaneo = una llamada; el servidor valida el estado
+// el escaneo NO espera al servidor: bip inmediato y se guarda en segundo plano
+var COLA = [], ENVIANDO = false;
 function procesarLectura(texto, esManual) {
   if (!MODO) return;
   var cod = extraerCodigo(texto);
@@ -403,25 +431,39 @@ function procesarLectura(texto, esManual) {
   var ahora = Date.now();
   if (!esManual && RECIENTES[cod] && ahora - RECIENTES[cod] < 4000) return;
   RECIENTES[cod] = ahora;
-  if (OCUPADO) return;
-  OCUPADO = true;
 
   if (MODO.accion === 'REVISAR') {
+    if (OCUPADO) return;
+    OCUPADO = true;
+    pintarUltimo('<div class="item"><div class="cod">' + esc(cod) + '</div><div class="det">⏳ Consultando…</div></div>');
     api('kegBuscar', { texto: cod }).then(function(r) {
       OCUPADO = false;
-      if (!r.ok) { pip(false); feed(false, cod, r.error); return; }
+      if (!MODO) return;
+      if (!r.ok) { pip(false); pintarUltimo('<div class="item malo"><div class="cod">' + esc(cod) + '</div><div class="det">' + esc(r.error) + '</div>⛔</div>'); return; }
       pip(true);
       var k = r.keg, det = [];
-      det.push(k.capacidad + ' L · ' + esc(k.estado));
+      det.push(k.capacidad + ' L');
       if (k.producto) det.push(esc(k.producto) + (k.lote ? ' (lote ' + esc(k.lote) + ')' : ''));
       if (k.cliente) det.push(esc(k.cliente) + (k.ubicacion ? ' — ' + esc(k.ubicacion) : ''));
       else if (k.ubicacion) det.push('📍 ' + esc(k.ubicacion));
-      feedHtml('bueno', k.codigo, det.join('<br>'), '<span class="chip ' + esc(k.estado) + '">' + esc(k.estado) + '</span>');
+      pintarUltimo('<div class="item bueno"><div class="cod">' + esc(k.codigo) + '</div><div class="det">' + det.join('<br>') + '</div><span class="chip ' + esc(k.estado) + '">' + esc(k.estado) + '</span></div>');
     }).catch(function(e) { OCUPADO = false; msg('error', 'Error de conexión: ' + e.message); });
     return;
   }
 
-  if (MODO.hechos.indexOf(cod) !== -1) { OCUPADO = false; feed(false, cod, 'Ya registrado en esta tanda.'); return; }
+  var ya = COLA.indexOf(cod) > -1 || MODO.registros.some(function(g) { return g.codigo === cod && g.ok; });
+  if (ya) { pintarUltimo('<div class="item"><div class="cod">' + esc(cod) + '</div><div class="det">Ya registrado en esta tanda.</div></div>'); return; }
+  pip(true); // confirmación inmediata de lectura
+  pintarUltimo('<div class="item"><div class="cod">' + esc(cod) + '</div><div class="det">⏳ Guardando…</div></div>');
+  COLA.push(cod);
+  pintarBannerModo();
+  procesarCola();
+}
+
+function procesarCola() {
+  if (ENVIANDO || !COLA.length || !MODO) return;
+  ENVIANDO = true;
+  var cod = COLA[0];
   var d = { codigo: cod, accion: MODO.accion };
   if (MODO.extra.producto)  d.producto  = MODO.extra.producto;
   if (MODO.extra.lote)      d.lote      = MODO.extra.lote;
@@ -429,20 +471,44 @@ function procesarLectura(texto, esManual) {
   if (MODO.extra.ubicacion) d.ubicacion = MODO.extra.ubicacion;
   if (MODO.extra.correccion) d.correccion = 1;
   api('kegAccion', d).then(function(r) {
-    OCUPADO = false;
+    ENVIANDO = false;
     if (!MODO) return;
-    if (!r.ok) {
-      MODO.errores++; pip(false);
-      if (r.estado) feedHtml('malo', cod, 'Estatus del keg: <span class="chip ' + esc(r.estado) + '">' + esc(r.estado) + '</span>', '⛔');
-      else feed(false, cod, r.error);
-      pintarBannerModo(); return;
+    COLA.shift();
+    if (r.ok) {
+      MODO.hechos++;
+      MODO.registros.push({ codigo: r.keg.codigo, ok: true, texto: r.mensaje, estado: r.keg.estado });
+      RESUMEN = null;
+      pintarUltimo('<div class="item bueno"><div class="cod">' + esc(r.keg.codigo) + '</div><div class="det">' + esc(r.mensaje) + '</div><span class="chip ' + esc(r.keg.estado) + '">' + esc(r.keg.estado) + '</span></div>');
+    } else {
+      MODO.errores++;
+      MODO.registros.push({ codigo: cod, ok: false, texto: r.error, estado: r.estado || '' });
+      pip(false);
+      pintarUltimo('<div class="item malo"><div class="cod">' + esc(cod) + '</div><div class="det">' + (r.estado ? 'Estatus del keg: <span class="chip ' + esc(r.estado) + '">' + esc(r.estado) + '</span>' : esc(r.error)) + '</div>⛔</div>');
     }
-    MODO.hechos.push(r.keg.codigo);
-    RESUMEN = null;
-    pip(true);
-    feed(true, r.keg.codigo, r.mensaje + ' → ' + r.keg.estado);
     pintarBannerModo();
-  }).catch(function(e) { OCUPADO = false; msg('error', 'Error de conexión: ' + e.message); });
+    procesarCola();
+  }).catch(function(e) {
+    ENVIANDO = false;
+    msg('error', '⚠️ Sin conexión, reintentando…');
+    setTimeout(function() { msg(); procesarCola(); }, 2500);
+  });
+}
+
+// bip + vibracion al leer un codigo
+var AUDIO = null;
+function prepararAudio() {
+  try {
+    if (!AUDIO) AUDIO = new (window.AudioContext || window.webkitAudioContext)();
+    if (AUDIO.state === 'suspended') AUDIO.resume();
+  } catch (e) { AUDIO = null; }
+}
+function tono_(freq, inicio, dur) {
+  var o = AUDIO.createOscillator(), g = AUDIO.createGain();
+  o.type = 'square'; o.frequency.value = freq;
+  g.gain.setValueAtTime(0.25, AUDIO.currentTime + inicio);
+  g.gain.exponentialRampToValueAtTime(0.001, AUDIO.currentTime + inicio + dur);
+  o.connect(g); g.connect(AUDIO.destination);
+  o.start(AUDIO.currentTime + inicio); o.stop(AUDIO.currentTime + inicio + dur + 0.02);
 }
 
 // bip + vibracion al leer un codigo
@@ -469,15 +535,7 @@ function pip(ok) {
     else { tono_(300, 0, 0.15); tono_(220, 0.18, 0.2); }
   } catch (e) {}
 }
-function feed(ok, cod, texto) { feedHtml(ok ? 'bueno' : 'malo', cod, esc(texto), ok ? '✅' : '⛔'); }
-function feedHtml(clase, cod, detHtml, extremo) {
-  var el = document.createElement('div');
-  el.className = 'item ' + clase;
-  el.innerHTML = '<div class="cod">' + esc(cod) + '</div><div class="det">' + detHtml + '</div>' + extremo;
-  var f = document.getElementById('feed');
-  f.insertBefore(el, f.firstChild);
-  msg();
-}
+
 
 // ========== ESCÁNER EN VIVO (continuo) ==========
 var stream = null, scanRAF = null, detector = null, escaneando = false;
@@ -608,9 +666,11 @@ function terminarSiActivo_() {
 // volver al menu principal desde cualquier lado (titulo de la app)
 function volverAlMenu() {
   MODO = null;
+  COLA = [];
   cerrarCamara();
   msg(); msgHome();
   document.getElementById('card').innerHTML = '';
+  document.getElementById('ultimo').innerHTML = '';
   document.getElementById('codManual').value = '';
   vista('modos');
   verTab('esc');
