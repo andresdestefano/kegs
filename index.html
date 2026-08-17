@@ -108,10 +108,11 @@
       <button class="btn" onclick="manual()">OK</button>
     </div>
     <div class="fila">
-      <button class="btn rojo" style="flex:1" onclick="terminarModo()">✔ Terminar</button>
+      <button class="btn" style="flex:2" id="btnAplicar" onclick="aplicarTanda()">✔ Aplicar</button>
+      <button class="btn gris" style="flex:1" onclick="cancelarTanda()">Cancelar</button>
     </div>
     <div class="aviso" id="msg"></div>
-    <div id="ultimo"></div>
+    <div id="items"></div>
   </div>
 
   <!-- Resumen final + carta de un keg (toque en lista o enlace directo) -->
@@ -357,13 +358,14 @@ function confirmarParams() {
 }
 
 function iniciarModo(a, extra) {
-  MODO = { accion: a, extra: extra, registros: [], hechos: 0, errores: 0 };
+  MODO = { accion: a, extra: extra, items: [], aplicando: false };
   RECIENTES = {};
-  COLA = [];
-  document.getElementById('ultimo').innerHTML = '';
+  LCOLA = [];
+  document.getElementById('items').innerHTML = '';
   document.getElementById('codManual').value = '';
+  document.getElementById('btnAplicar').style.display = (a === 'REVISAR') ? 'none' : '';
   pintarBannerModo();
-  msg('info', a === 'REVISAR' ? 'Escanea un barril para ver su estado.' : 'Escanea los barriles uno tras otro.');
+  msg('info', a === 'REVISAR' ? 'Escanea un barril para ver su estado.' : 'Escanea los barriles; nada se guarda hasta tocar Aplicar.');
   vista('scan');
   prepararAudio();   // se activa con el toque del usuario (requisito del navegador)
   abrirCamara();
@@ -373,43 +375,101 @@ function pintarBannerModo() {
   if (!MODO) return;
   var m = MODOS[MODO.accion];
   var det = MODO.extra._txt ? ' → <b>' + esc(MODO.extra._txt) + '</b>' : '';
-  var n = '';
-  if (MODO.accion !== 'REVISAR') {
-    n = ' · <b>' + MODO.hechos + '</b> ✔' + (MODO.errores ? ' · ' + MODO.errores + ' ⛔' : '');
-    var pend = COLA.length + (ENVIANDO ? 1 : 0);
-    if (pend) n += ' · ⏳' + pend;
-  }
+  var n = MODO.accion === 'REVISAR' ? '' : ' · <b>' + MODO.items.length + '</b> barril(es)';
   document.getElementById('banModo').innerHTML = m.ic + ' <b>' + m.nombre + '</b>' + det + n;
 }
-function pintarUltimo(html) { document.getElementById('ultimo').innerHTML = html; }
 
-function terminarModo() {
-  if (!MODO) { vista('modos'); return; }
-  // si quedan envios pendientes, esperar a que terminen
-  if (MODO.accion !== 'REVISAR' && (COLA.length || ENVIANDO)) {
-    msg('info', '⏳ Guardando los últimos ' + (COLA.length + (ENVIANDO ? 1 : 0)) + '…');
-    setTimeout(terminarModo, 800);
+// lista de barriles escaneados con su ESTATUS ACTUAL (aun sin aplicar)
+function pintarItems() {
+  if (!MODO) return;
+  var html = MODO.items.map(function(it) {
+    var det = it.estado === null ? '⏳ consultando estatus…'
+      : (it.error ? esc(it.error)
+        : (it.detalle ? esc(it.detalle) : 'Estatus actual'));
+    var chip = it.estado ? '<span class="chip ' + esc(it.estado) + '">' + esc(it.estado) + '</span>' : '';
+    var quitar = MODO.aplicando ? '' : '<button class="btn gris" style="padding:6px 10px" onclick="quitarItem(\'' + esc(it.codigo) + '\')">✕</button>';
+    return '<div class="item' + (it.error ? ' malo' : '') + '"><div class="cod">' + esc(it.codigo) + '</div><div class="det">' + det + '</div>' + chip + quitar + '</div>';
+  }).join('');
+  document.getElementById('items').innerHTML = html;
+  pintarBannerModo();
+}
+function quitarItem(cod) {
+  if (!MODO || MODO.aplicando) return;
+  MODO.items = MODO.items.filter(function(it) { return it.codigo !== cod; });
+  delete RECIENTES[cod];
+  pintarItems();
+}
+
+// APLICAR: recien aqui se guardan los cambios de toda la lista
+function aplicarTanda() {
+  if (!MODO || MODO.aplicando) return;
+  if (!MODO.items.length) { msg('error', 'Escanea al menos un barril antes de aplicar.'); return; }
+  if (MODO.items.some(function(it) { return it.estado === null; })) {
+    msg('info', '⏳ Esperando el estatus de los últimos… un momento.');
+    setTimeout(aplicarTanda, 800);
     return;
   }
+  MODO.aplicando = true;
   cerrarCamara();
-  var a = MODO.accion, regs = MODO.registros, hechos = MODO.hechos, errores = MODO.errores;
+  pintarItems();
+  var lista = MODO.items.slice().reverse(); // en el orden en que se escanearon
+  var resultados = [], i = 0;
+  msg('info', '⏳ Aplicando 1 de ' + lista.length + '…');
+  function siguiente() {
+    if (!MODO) return;
+    if (i >= lista.length) { mostrarResultados(resultados); return; }
+    var it = lista[i];
+    var d = { codigo: it.codigo, accion: MODO.accion };
+    if (MODO.extra.producto)  d.producto  = MODO.extra.producto;
+    if (MODO.extra.lote)      d.lote      = MODO.extra.lote;
+    if (MODO.extra.cliente)   d.cliente   = MODO.extra.cliente;
+    if (MODO.extra.ubicacion) d.ubicacion = MODO.extra.ubicacion;
+    if (MODO.extra.correccion) d.correccion = 1;
+    api('kegAccion', d).then(function(r) {
+      if (r.ok) resultados.push({ codigo: it.codigo, ok: true, antes: it.estado, despues: r.keg.estado });
+      else resultados.push({ codigo: it.codigo, ok: false, antes: it.estado, estado: r.estado || '', texto: r.error });
+      i++;
+      msg('info', '⏳ Aplicando ' + Math.min(i + 1, lista.length) + ' de ' + lista.length + '…');
+      RESUMEN = null;
+      siguiente();
+    }).catch(function(e) {
+      msg('error', '⚠️ Sin conexión, reintentando…');
+      setTimeout(siguiente, 2500);
+    });
+  }
+  siguiente();
+}
+
+function mostrarResultados(resultados) {
+  var a = MODO.accion;
+  var okN = resultados.filter(function(g) { return g.ok; }).length;
+  var malN = resultados.length - okN;
   MODO = null;
   msg(); msgHome();
-  document.getElementById('ultimo').innerHTML = '';
+  document.getElementById('items').innerHTML = '';
   vista('modos');
-  if (a === 'REVISAR' || !regs.length) return;
-  // tabla de lo que se hizo en la tanda
-  var filas = regs.map(function(g) {
-    return '<tr style="border-bottom:1px solid #eee"><td style="padding:7px 8px;font-weight:700">' + esc(g.codigo) + '</td>' +
-      '<td style="padding:7px 8px">' + (g.ok ? '✅ ' + esc(g.texto) : '⛔ ' + (g.estado ? 'Estatus: ' + esc(g.estado) : esc(g.texto))) + '</td></tr>';
+  var filas = resultados.map(function(g) {
+    var res = g.ok
+      ? '✅ <span class="chip ' + esc(g.antes) + '">' + esc(g.antes) + '</span> → <span class="chip ' + esc(g.despues) + '">' + esc(g.despues) + '</span>'
+      : '⛔ ' + (g.estado ? 'Estatus: <span class="chip ' + esc(g.estado) + '">' + esc(g.estado) + '</span>' : esc(g.texto));
+    return '<tr style="border-bottom:1px solid #eee"><td style="padding:8px;font-weight:700">' + esc(g.codigo) + '</td>' +
+      '<td style="padding:8px">' + res + '</td></tr>';
   }).join('');
   document.getElementById('vModos').style.display = 'none';
   document.getElementById('card').innerHTML =
-    '<div class="carta"><h2 style="font-size:18px">' + MODOS[a].ic + ' ' + esc(MODOS[a].nombre) + ' — resumen</h2>' +
-    '<div class="datos"><b>' + hechos + '</b> realizado(s)' + (errores ? ' · <b>' + errores + '</b> rechazado(s)' : '') + '</div>' +
+    '<div class="carta"><h2 style="font-size:18px">' + MODOS[a].ic + ' ' + esc(MODOS[a].nombre) + ' — cambios aplicados</h2>' +
+    '<div class="datos"><b>' + okN + '</b> aplicado(s)' + (malN ? ' · <b>' + malN + '</b> rechazado(s)' : '') + '</div>' +
     '<table style="width:100%;border-collapse:collapse;margin-top:8px;font-size:14px">' + filas + '</table>' +
     '<div class="fila"><button class="btn" style="flex:1" onclick="cerrarResumen()">OK</button></div></div>';
 }
+
+function cancelarTanda() {
+  if (MODO && MODO.items.length && !MODO.aplicando) {
+    if (!confirm('Hay ' + MODO.items.length + ' barril(es) sin aplicar. ¿Salir sin guardar?')) return;
+  }
+  volverAlMenu();
+}
+
 function cerrarResumen() {
   document.getElementById('card').innerHTML = '';
   document.getElementById('vModos').style.display = '';
@@ -422,75 +482,54 @@ function manual() {
   procesarLectura(t, true);
 }
 
-// el escaneo NO espera al servidor: bip inmediato y se guarda en segundo plano
-var COLA = [], ENVIANDO = false;
+// escanear SOLO agrega a la lista y consulta el estatus actual; nada se guarda hasta Aplicar
+var LCOLA = [], CONSULTANDO = false;
 function procesarLectura(texto, esManual) {
-  if (!MODO) return;
+  if (!MODO || MODO.aplicando) return;
   var cod = extraerCodigo(texto);
   if (!cod) { if (esManual) msg('error', 'No reconozco un código de barril ahí.'); return; }
   var ahora = Date.now();
   if (!esManual && RECIENTES[cod] && ahora - RECIENTES[cod] < 4000) return;
   RECIENTES[cod] = ahora;
-
-  if (MODO.accion === 'REVISAR') {
-    if (OCUPADO) return;
-    OCUPADO = true;
-    pintarUltimo('<div class="item"><div class="cod">' + esc(cod) + '</div><div class="det">⏳ Consultando…</div></div>');
-    api('kegBuscar', { texto: cod }).then(function(r) {
-      OCUPADO = false;
-      if (!MODO) return;
-      if (!r.ok) { pip(false); pintarUltimo('<div class="item malo"><div class="cod">' + esc(cod) + '</div><div class="det">' + esc(r.error) + '</div>⛔</div>'); return; }
-      pip(true);
-      var k = r.keg, det = [];
-      det.push(k.capacidad + ' L');
-      if (k.producto) det.push(esc(k.producto) + (k.lote ? ' (lote ' + esc(k.lote) + ')' : ''));
-      if (k.cliente) det.push(esc(k.cliente) + (k.ubicacion ? ' — ' + esc(k.ubicacion) : ''));
-      else if (k.ubicacion) det.push('📍 ' + esc(k.ubicacion));
-      pintarUltimo('<div class="item bueno"><div class="cod">' + esc(k.codigo) + '</div><div class="det">' + det.join('<br>') + '</div><span class="chip ' + esc(k.estado) + '">' + esc(k.estado) + '</span></div>');
-    }).catch(function(e) { OCUPADO = false; msg('error', 'Error de conexión: ' + e.message); });
-    return;
-  }
-
-  var ya = COLA.indexOf(cod) > -1 || MODO.registros.some(function(g) { return g.codigo === cod && g.ok; });
-  if (ya) { pintarUltimo('<div class="item"><div class="cod">' + esc(cod) + '</div><div class="det">Ya registrado en esta tanda.</div></div>'); return; }
-  pip(true); // confirmación inmediata de lectura
-  pintarUltimo('<div class="item"><div class="cod">' + esc(cod) + '</div><div class="det">⏳ Guardando…</div></div>');
-  COLA.push(cod);
-  pintarBannerModo();
-  procesarCola();
+  var ya = MODO.items.some(function(it) { return it.codigo === cod; });
+  if (ya) { msg('info', cod + ' ya está en la lista.'); setTimeout(msg, 1500); return; }
+  pip(true); // lectura confirmada
+  MODO.items.unshift({ codigo: cod, estado: null, detalle: '', error: '' });
+  pintarItems();
+  LCOLA.push(cod);
+  consultarCola();
 }
 
-function procesarCola() {
-  if (ENVIANDO || !COLA.length || !MODO) return;
-  ENVIANDO = true;
-  var cod = COLA[0];
-  var d = { codigo: cod, accion: MODO.accion };
-  if (MODO.extra.producto)  d.producto  = MODO.extra.producto;
-  if (MODO.extra.lote)      d.lote      = MODO.extra.lote;
-  if (MODO.extra.cliente)   d.cliente   = MODO.extra.cliente;
-  if (MODO.extra.ubicacion) d.ubicacion = MODO.extra.ubicacion;
-  if (MODO.extra.correccion) d.correccion = 1;
-  api('kegAccion', d).then(function(r) {
-    ENVIANDO = false;
+function consultarCola() {
+  if (CONSULTANDO || !LCOLA.length || !MODO) return;
+  CONSULTANDO = true;
+  var cod = LCOLA.shift();
+  api('kegBuscar', { texto: cod }).then(function(r) {
+    CONSULTANDO = false;
     if (!MODO) return;
-    COLA.shift();
-    if (r.ok) {
-      MODO.hechos++;
-      MODO.registros.push({ codigo: r.keg.codigo, ok: true, texto: r.mensaje, estado: r.keg.estado });
-      RESUMEN = null;
-      pintarUltimo('<div class="item bueno"><div class="cod">' + esc(r.keg.codigo) + '</div><div class="det">' + esc(r.mensaje) + '</div><span class="chip ' + esc(r.keg.estado) + '">' + esc(r.keg.estado) + '</span></div>');
-    } else {
-      MODO.errores++;
-      MODO.registros.push({ codigo: cod, ok: false, texto: r.error, estado: r.estado || '' });
-      pip(false);
-      pintarUltimo('<div class="item malo"><div class="cod">' + esc(cod) + '</div><div class="det">' + (r.estado ? 'Estatus del keg: <span class="chip ' + esc(r.estado) + '">' + esc(r.estado) + '</span>' : esc(r.error)) + '</div>⛔</div>');
+    var it = null;
+    MODO.items.forEach(function(x) { if (x.codigo === cod) it = x; });
+    if (it) {
+      if (r.ok) {
+        var k = r.keg, det = [];
+        det.push(k.capacidad + ' L');
+        if (k.producto) det.push(k.producto);
+        if (k.cliente) det.push(k.cliente);
+        it.estado = k.estado;
+        it.detalle = det.join(' · ');
+      } else {
+        it.estado = '';
+        it.error = r.error;
+        pip(false);
+      }
+      pintarItems();
     }
-    pintarBannerModo();
-    procesarCola();
+    consultarCola();
   }).catch(function(e) {
-    ENVIANDO = false;
+    CONSULTANDO = false;
+    LCOLA.unshift(cod);
     msg('error', '⚠️ Sin conexión, reintentando…');
-    setTimeout(function() { msg(); procesarCola(); }, 2500);
+    setTimeout(function() { msg(); consultarCola(); }, 2500);
   });
 }
 
@@ -666,12 +705,13 @@ function terminarSiActivo_() {
 // volver al menu principal desde cualquier lado (titulo de la app)
 function volverAlMenu() {
   MODO = null;
-  COLA = [];
+  LCOLA = [];
   cerrarCamara();
   msg(); msgHome();
   document.getElementById('card').innerHTML = '';
-  document.getElementById('ultimo').innerHTML = '';
+  document.getElementById('items').innerHTML = '';
   document.getElementById('codManual').value = '';
+  document.getElementById('vModos').style.display = '';
   vista('modos');
   verTab('esc');
 }
