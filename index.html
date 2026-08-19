@@ -383,9 +383,10 @@ function pintarBannerModo() {
 function pintarItems() {
   if (!MODO) return;
   var html = MODO.items.map(function(it) {
+    var warn = (MODO.accion === 'ENTREGAR' && it.estado && it.estado !== 'LLENO' && !it.error) ? '⚠️ SIN CERVEZA — ' : '';
     var det = it.estado === null ? '⏳ consultando estatus…'
       : (it.error ? esc(it.error)
-        : (it.detalle ? esc(it.detalle) : 'Estatus actual'));
+        : warn + (it.detalle ? esc(it.detalle) : 'Estatus actual'));
     var chip = it.estado ? '<span class="chip ' + esc(it.estado) + '">' + esc(it.estado) + '</span>' : '';
     var quitar = MODO.aplicando ? '' : '<button class="btn gris" style="padding:6px 10px" onclick="quitarItem(\'' + esc(it.codigo) + '\')">✕</button>';
     return '<div class="item' + (it.error ? ' malo' : '') + '"><div class="cod">' + esc(it.codigo) + '</div><div class="det">' + det + '</div>' + chip + quitar + '</div>';
@@ -409,6 +410,20 @@ function aplicarTanda() {
     setTimeout(aplicarTanda, 800);
     return;
   }
+  // barriles sin cerveza al ENTREGAR: gran advertencia y doble confirmacion
+  if (MODO.accion === 'ENTREGAR') {
+    var sinCerveza = MODO.items.filter(function(it) { return it.estado && it.estado !== 'LLENO'; }).map(function(it) { return it.codigo; });
+    if (sinCerveza.length) {
+      if (!confirm('⚠️⚠️ ATENCIÓN ⚠️⚠️\n\nVas a ENTREGAR ' + sinCerveza.length + ' barril(es) SIN CERVEZA (no están llenos):\n\n' + sinCerveza.join(', ') + '\n\n¿Continuar?')) {
+        msg('info', 'Quita con ✕ los barriles que no van, o vuelve a tocar Aplicar.');
+        return;
+      }
+      if (!confirm('ÚLTIMA CONFIRMACIÓN\n\n¿SEGURO que entregas estos barriles sin cerveza a ' + (MODO.extra.cliente || 'este cliente') + '?\n\n' + sinCerveza.join(', '))) {
+        msg('info', 'Quita con ✕ los barriles que no van, o vuelve a tocar Aplicar.');
+        return;
+      }
+    }
+  }
   MODO.aplicando = true;
   cerrarCamara();
   pintarItems();
@@ -425,6 +440,7 @@ function aplicarTanda() {
     if (MODO.extra.cliente)   d.cliente   = MODO.extra.cliente;
     if (MODO.extra.ubicacion) d.ubicacion = MODO.extra.ubicacion;
     if (MODO.extra.correccion) d.correccion = 1;
+    if (MODO.accion === 'ENTREGAR' && it.estado !== 'LLENO') d.forzar = 1;
     api('kegAccion', d).then(function(r) {
       if (r.ok) resultados.push({ codigo: it.codigo, ok: true, antes: it.estado, despues: r.keg.estado });
       else resultados.push({ codigo: it.codigo, ok: false, antes: it.estado, estado: r.estado || '', texto: r.error });
@@ -785,7 +801,7 @@ function pintarCarta() {
 
 function bloqueada_(a, estado) {
   if (a === 'LLENAR') return estado !== 'LIMPIO' && estado !== 'VACIO';
-  if (a === 'ENTREGAR') return estado !== 'LLENO';
+  if (a === 'ENTREGAR') return estado === 'ENTREGADO' || estado === 'EVENTO';
   if (a === 'RECOGER') return estado !== 'ENTREGADO' && estado !== 'EVENTO';
   if (a === 'LAVAR') return estado !== 'SUCIO' && estado !== 'LIMPIO' && estado !== 'VACIO';
   if (a === 'DEPOSITO') return estado === 'ENTREGADO' || estado === 'EVENTO';
@@ -827,6 +843,11 @@ function guardar(a) {
     d.ubicacion = document.getElementById('fUbicacion').value.trim();
     d.notas = document.getElementById('fNotasE').value.trim();
     if (!d.cliente) { alert('Elige el cliente.'); return; }
+    if (KEG.estado !== 'LLENO') {
+      if (!confirm('⚠️⚠️ ATENCIÓN ⚠️⚠️\n\n' + KEG.codigo + ' está ' + KEG.estado + ' (SIN CERVEZA).\n\n¿Entregarlo así?')) return;
+      if (!confirm('ÚLTIMA CONFIRMACIÓN\n\n¿SEGURO que entregas ' + KEG.codigo + ' ' + KEG.estado + ' a ' + d.cliente + '?')) return;
+      d.forzar = 1;
+    }
   } else if (a === 'RECOGER') { d.notas = document.getElementById('fNotasR').value.trim(); }
   else if (a === 'LAVAR') { d.notas = document.getElementById('fNotasV').value.trim(); }
   else if (a === 'DEPOSITO') {
