@@ -361,6 +361,7 @@ function iniciarModo(a, extra) {
   MODO = { accion: a, extra: extra, items: [], aplicando: false };
   RECIENTES = {};
   LCOLA = [];
+  cargarEstados();
   document.getElementById('items').innerHTML = '';
   document.getElementById('codManual').value = '';
   document.getElementById('btnAplicar').style.display = (a === 'REVISAR') ? 'none' : '';
@@ -444,33 +445,37 @@ function aplicarTanda() {
   cerrarCamara();
   pintarItems();
   var lista = MODO.items.slice().reverse(); // en el orden en que se escanearon
-  var resultados = [], i = 0;
-  msg('info', '⏳ Aplicando 1 de ' + lista.length + '…');
-  function siguiente() {
+  msg('info', '⏳ Aplicando ' + lista.length + ' barril(es)…');
+  var d = { accion: MODO.accion, items: lista.map(function(it) {
+    var o = { codigo: it.codigo };
+    if (MODO.accion === 'ENTREGAR' && it.estado !== 'LLENO') o.forzar = 1;
+    if (MODO.accion === 'RECOGER' && it.estado === 'LLENO') o.forzar = 1;
+    return o;
+  }) };
+  if (MODO.extra.producto)  d.producto  = MODO.extra.producto;
+  if (MODO.extra.lote)      d.lote      = MODO.extra.lote;
+  if (MODO.extra.cliente)   d.cliente   = MODO.extra.cliente;
+  if (MODO.extra.ubicacion) d.ubicacion = MODO.extra.ubicacion;
+  if (MODO.extra.correccion) d.correccion = 1;
+  function mandar() {
     if (!MODO) return;
-    if (i >= lista.length) { mostrarResultados(resultados); return; }
-    var it = lista[i];
-    var d = { codigo: it.codigo, accion: MODO.accion };
-    if (MODO.extra.producto)  d.producto  = MODO.extra.producto;
-    if (MODO.extra.lote)      d.lote      = MODO.extra.lote;
-    if (MODO.extra.cliente)   d.cliente   = MODO.extra.cliente;
-    if (MODO.extra.ubicacion) d.ubicacion = MODO.extra.ubicacion;
-    if (MODO.extra.correccion) d.correccion = 1;
-    if (MODO.accion === 'ENTREGAR' && it.estado !== 'LLENO') d.forzar = 1;
-    if (MODO.accion === 'RECOGER' && it.estado === 'LLENO') d.forzar = 1;
-    api('kegAccion', d).then(function(r) {
-      if (r.ok) resultados.push({ codigo: it.codigo, ok: true, antes: it.estado, despues: r.keg.estado });
-      else resultados.push({ codigo: it.codigo, ok: false, antes: it.estado, estado: r.estado || '', texto: r.error });
-      i++;
-      msg('info', '⏳ Aplicando ' + Math.min(i + 1, lista.length) + ' de ' + lista.length + '…');
+    api('kegAccionLote', d).then(function(r) {
+      if (!r.ok) { msg('error', r.error || 'Error del servidor.'); MODO.aplicando = false; return; }
       RESUMEN = null;
-      siguiente();
+      var resultados = r.resultados.map(function(g) {
+        var it = null;
+        lista.forEach(function(x) { if (x.codigo === g.codigo && !it) it = x; });
+        var antes = it ? it.estado : '';
+        if (g.r.ok) return { codigo: g.codigo, ok: true, antes: antes, despues: g.r.keg.estado };
+        return { codigo: g.codigo, ok: false, antes: antes, estado: g.r.estado || '', texto: g.r.error };
+      });
+      mostrarResultados(resultados);
     }).catch(function(e) {
       msg('error', '⚠️ Sin conexión, reintentando…');
-      setTimeout(siguiente, 2500);
+      setTimeout(mandar, 2500);
     });
   }
-  siguiente();
+  mandar();
 }
 
 function mostrarResultados(resultados) {
@@ -527,10 +532,11 @@ function procesarLectura(texto, esManual) {
   var ya = MODO.items.some(function(it) { return it.codigo === cod; });
   if (ya) { msg('info', cod + ' ya está en la lista.'); setTimeout(msg, 1500); return; }
   pip(true); // lectura confirmada
-  MODO.items.unshift({ codigo: cod, estado: null, detalle: '', error: '' });
+  var it = { codigo: cod, estado: null, detalle: '', error: '' };
+  if (ESTADOS && ESTADOS[cod]) { it.estado = ESTADOS[cod].estado; it.detalle = ESTADOS[cod].detalle; }
+  MODO.items.unshift(it);
   pintarItems();
-  LCOLA.push(cod);
-  consultarCola();
+  if (it.estado === null) { LCOLA.push(cod); consultarCola(); }
 }
 
 function consultarCola() {
@@ -564,6 +570,21 @@ function consultarCola() {
     msg('error', '⚠️ Sin conexión, reintentando…');
     setTimeout(function() { msg(); consultarCola(); }, 2500);
   });
+}
+
+// snapshot de estados: 1 llamada al entrar al modo -> el estatus sale al instante
+var ESTADOS = null;
+function cargarEstados() {
+  ESTADOS = null;
+  api('kegEstados', {}).then(function(r) {
+    if (!r.ok || !MODO) return;
+    ESTADOS = r.estados;
+    var hubo = false;
+    MODO.items.forEach(function(it) {
+      if (it.estado === null && ESTADOS[it.codigo]) { it.estado = ESTADOS[it.codigo].estado; it.detalle = ESTADOS[it.codigo].detalle; hubo = true; }
+    });
+    if (hubo) pintarItems();
+  }).catch(function() {});
 }
 
 // bip + vibracion al leer un codigo
@@ -601,12 +622,17 @@ function tono_(freq, inicio, dur) {
 }
 function pip(ok) {
   if (navigator.vibrate) navigator.vibrate(ok ? 80 : [60, 60, 120]);
+  if (!AUDIO) prepararAudio();
   if (!AUDIO) return;
   try {
+    if (AUDIO.state === 'suspended') AUDIO.resume();
     if (ok) { tono_(1200, 0, 0.12); }
     else { tono_(300, 0, 0.15); tono_(220, 0.18, 0.2); }
   } catch (e) {}
 }
+// cualquier toque en la app mantiene el audio activo (politica de gestos del navegador)
+document.addEventListener('touchend', prepararAudio, { passive: true });
+document.addEventListener('click', prepararAudio, { passive: true });
 
 
 // ========== ESCÁNER EN VIVO (continuo) ==========
