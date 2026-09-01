@@ -415,6 +415,30 @@ function aplicarTanda() {
     setTimeout(aplicarTanda, 800);
     return;
   }
+  // llenado en cascada: devolver y/o lavar con confirmacion antes de llenar
+  if (MODO.accion === 'LLENAR') {
+    var sinDevolver = MODO.items.filter(function(it) { return it.estado === 'ENTREGADO' || it.estado === 'EVENTO'; }).map(function(it) { return it.codigo; });
+    if (sinDevolver.length) {
+      if (confirm('Estos barriles estaban SIN DEVOLVER:\n\n' + sinDevolver.join(', ') + '\n\n¿Los devolvemos ahora para poder llenarlos?')) {
+        MODO.items.forEach(function(it) { if (sinDevolver.indexOf(it.codigo) !== -1) it.devolver = true; });
+      } else {
+        MODO.items = MODO.items.filter(function(x) { return sinDevolver.indexOf(x.codigo) === -1; });
+      }
+    }
+    var porLavar = MODO.items.filter(function(it) { return it.estado === 'SUCIO' || it.devolver; }).map(function(it) { return it.codigo; });
+    if (porLavar.length) {
+      if (confirm('Estos barriles están (o quedarán) SUCIOS:\n\n' + porLavar.join(', ') + '\n\n¿Ya se lavaron?')) {
+        MODO.items.forEach(function(it) {
+          if (it.devolver) it.previas = ['RECOGER', 'LAVAR'];
+          else if (it.estado === 'SUCIO') it.previas = ['LAVAR'];
+        });
+      } else {
+        MODO.items = MODO.items.filter(function(x) { return porLavar.indexOf(x.codigo) === -1; });
+      }
+    }
+    pintarItems();
+    if (!MODO.items.length) { msg('info', 'No quedó ningún barril en la lista.'); return; }
+  }
   // barriles sin cerveza al ENTREGAR: gran advertencia y doble confirmacion
   if (MODO.accion === 'ENTREGAR') {
     var sinCerveza = MODO.items.filter(function(it) { return it.estado && it.estado !== 'LLENO'; }).map(function(it) { return it.codigo; });
@@ -448,6 +472,7 @@ function aplicarTanda() {
   msg('info', '⏳ Aplicando ' + lista.length + ' barril(es)…');
   var d = { accion: MODO.accion, items: lista.map(function(it) {
     var o = { codigo: it.codigo };
+    if (it.previas) o.previas = it.previas;
     if (MODO.accion === 'ENTREGAR' && it.estado !== 'LLENO') o.forzar = 1;
     if (MODO.accion === 'RECOGER' && it.estado === 'LLENO') o.forzar = 1;
     return o;
