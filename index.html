@@ -187,15 +187,19 @@ function api(fn, datos) {
 
 // ---------- arranque (con reintento: en señal lenta no puede quedar vacío) ----------
 var DATOS_OK = false;
+function aplicarDatos_(r) {
+  DATOS = r;
+  DATOS_OK = true;
+  var dl = document.getElementById('dlClientes');
+  dl.innerHTML = '';
+  r.clientes.forEach(function(c) { var o = document.createElement('option'); o.value = c; dl.appendChild(o); });
+  pintarFerm();
+}
 function cargarDatos(cb) {
   api('kegDatos').then(function(r) {
     if (r && r.ok) {
-      DATOS = r;
-      DATOS_OK = true;
-      var dl = document.getElementById('dlClientes');
-      dl.innerHTML = '';
-      r.clientes.forEach(function(c) { var o = document.createElement('option'); o.value = c; dl.appendChild(o); });
-      pintarFerm();
+      aplicarDatos_(r);
+      try { localStorage.setItem('kegsDatos', JSON.stringify(r)); } catch (e) {}
       if (cb) cb(true);
     } else {
       setTimeout(function() { cargarDatos(cb); }, 3000);
@@ -204,6 +208,8 @@ function cargarDatos(cb) {
     setTimeout(function() { cargarDatos(cb); }, 3000);
   });
 }
+// arranque instantaneo con lo del ultimo uso; el refresco llega por detras
+try { var _cd = JSON.parse(localStorage.getItem('kegsDatos') || 'null'); if (_cd && _cd.ok) aplicarDatos_(_cd); } catch (e) {}
 cargarDatos();
 document.getElementById('codManual').addEventListener('keydown', function(ev) {
   if (ev.key === 'Enter') { ev.preventDefault(); manual(); }
@@ -487,7 +493,7 @@ function aplicarTanda() {
   var resultados = [], idx = 0;
   function mandar() {
     if (!MODO) return;
-    if (idx >= d.items.length) { RESUMEN = null; mostrarResultados(resultados); return; }
+    if (idx >= d.items.length) { cargarEstados(); mostrarResultados(resultados); return; }
     var trozo = d.items.slice(idx, idx + GRUPO);
     msg('info', '⏳ Aplicando ' + Math.min(idx + trozo.length, d.items.length) + ' de ' + d.items.length + '…');
     var dd = { accion: d.accion, items: trozo };
@@ -609,20 +615,28 @@ function consultarCola() {
   });
 }
 
-// snapshot de estados: 1 llamada al entrar al modo -> el estatus sale al instante
+// snapshot de estados: guardado en el telefono y refrescado por detras -> todo sale al instante
 var ESTADOS = null;
+try { ESTADOS = JSON.parse(localStorage.getItem('kegsEstados') || 'null'); } catch (e) {}
+var _k0 = ESTADOS && Object.keys(ESTADOS)[0];
+if (_k0 && !ESTADOS[_k0].codigo) ESTADOS = null; // cache de una version vieja de la app
+if (ESTADOS) RESUMEN = Object.keys(ESTADOS).map(function(c) { return ESTADOS[c]; });
 function cargarEstados() {
-  ESTADOS = null;
   api('kegEstados', {}).then(function(r) {
-    if (!r.ok || !MODO) return;
+    if (!r.ok) return;
     ESTADOS = r.estados;
-    var hubo = false;
-    MODO.items.forEach(function(it) {
-      if (it.estado === null && ESTADOS[it.codigo]) { it.estado = ESTADOS[it.codigo].estado; it.detalle = ESTADOS[it.codigo].detalle; hubo = true; }
-    });
-    if (hubo) pintarItems();
+    try { localStorage.setItem('kegsEstados', JSON.stringify(r.estados)); } catch (e) {}
+    RESUMEN = Object.keys(ESTADOS).map(function(c) { return ESTADOS[c]; });
+    if (MODO) {
+      var hubo = false;
+      MODO.items.forEach(function(it) {
+        if (it.estado === null && ESTADOS[it.codigo]) { it.estado = ESTADOS[it.codigo].estado; it.detalle = ESTADOS[it.codigo].detalle; hubo = true; }
+      });
+      if (hubo) pintarItems();
+    }
   }).catch(function() {});
 }
+cargarEstados();
 
 // bip + vibracion al leer un codigo
 var AUDIO = null;
@@ -784,6 +798,19 @@ async function loopEscaneo() {
 function verKeg(texto) {
   terminarSiActivo_();
   verTab('esc');
+  var cod = extraerCodigo(texto);
+  if (cod && ESTADOS && ESTADOS[cod] && ESTADOS[cod].codigo) {
+    // ficha instantanea desde el snapshot; se verifica por detras por si cambio
+    msgHome(); KEG = ESTADOS[cod]; pintarCarta();
+    api('kegBuscar', { texto: texto }).then(function(r) {
+      if (r.ok && KEG && KEG.codigo === r.keg.codigo) {
+        r.keg.detalle = ESTADOS[cod].detalle || '';
+        ESTADOS[cod] = r.keg;
+        KEG = r.keg; pintarCarta();
+      }
+    }).catch(function() {});
+    return;
+  }
   document.getElementById('cargEsc').style.display = 'block';
   api('kegBuscar', { texto: texto }).then(function(r) {
     document.getElementById('cargEsc').style.display = 'none';
@@ -949,7 +976,7 @@ function guardar(a) {
   api('kegAccion', d).then(function(r) {
     document.getElementById('cargEsc').style.display = 'none';
     if (!r.ok) { msgHome('error', r.error); return; }
-    KEG = r.keg; RESUMEN = null; pintarCarta(); msgHome('ok', '✅ ' + r.mensaje);
+    KEG = r.keg; if (ESTADOS && r.keg.codigo) ESTADOS[r.keg.codigo] = r.keg; RESUMEN = null; pintarCarta(); msgHome('ok', '✅ ' + r.mensaje);
   }).catch(function(e) { document.getElementById('cargEsc').style.display = 'none'; msgHome('error', 'Error: ' + e.message); });
 }
 
@@ -999,7 +1026,7 @@ function guardarManual() {
   api('kegAccion', d).then(function(r) {
     document.getElementById('cargEsc').style.display = 'none';
     if (!r.ok) { msgHome('error', r.error); return; }
-    KEG = r.keg; RESUMEN = null; pintarCarta(); msgHome('ok', '✅ ' + r.mensaje);
+    KEG = r.keg; if (ESTADOS && r.keg.codigo) ESTADOS[r.keg.codigo] = r.keg; RESUMEN = null; pintarCarta(); msgHome('ok', '✅ ' + r.mensaje);
   }).catch(function(e) { document.getElementById('cargEsc').style.display = 'none'; msgHome('error', 'Error: ' + e.message); });
 }
 
@@ -1086,10 +1113,13 @@ function cargarResumen(forzar) {
   if (RESUMEN && !forzar) { (VISTA_KEGS === 'inventario') ? pintarInventario() : pintarLista(); return; }
   document.getElementById('cargKegs').style.display = 'block';
   document.getElementById('lista').innerHTML = '';
-  api('kegResumen').then(function(r) {
+  api('kegEstados', {}).then(function(r) {
     document.getElementById('cargKegs').style.display = 'none';
     if (!r.ok) return;
-    RESUMEN = r.kegs; pintarContadores();
+    ESTADOS = r.estados;
+    try { localStorage.setItem('kegsEstados', JSON.stringify(r.estados)); } catch (e) {}
+    RESUMEN = Object.keys(ESTADOS).map(function(c) { return ESTADOS[c]; });
+    pintarContadores();
     (VISTA_KEGS === 'inventario') ? pintarInventario() : pintarLista();
   });
 }
