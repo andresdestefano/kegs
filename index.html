@@ -482,19 +482,31 @@ function aplicarTanda() {
   if (MODO.extra.cliente)   d.cliente   = MODO.extra.cliente;
   if (MODO.extra.ubicacion) d.ubicacion = MODO.extra.ubicacion;
   if (MODO.extra.correccion) d.correccion = 1;
+  // se aplica en grupos: progreso visible y sin llamadas eternas
+  var GRUPO = 8;
+  var resultados = [], idx = 0;
   function mandar() {
     if (!MODO) return;
-    api('kegAccionLote', d).then(function(r) {
+    if (idx >= d.items.length) { RESUMEN = null; mostrarResultados(resultados); return; }
+    var trozo = d.items.slice(idx, idx + GRUPO);
+    msg('info', '⏳ Aplicando ' + Math.min(idx + trozo.length, d.items.length) + ' de ' + d.items.length + '…');
+    var dd = { accion: d.accion, items: trozo };
+    if (d.producto)   dd.producto   = d.producto;
+    if (d.lote)       dd.lote       = d.lote;
+    if (d.cliente)    dd.cliente    = d.cliente;
+    if (d.ubicacion)  dd.ubicacion  = d.ubicacion;
+    if (d.correccion) dd.correccion = d.correccion;
+    api('kegAccionLote', dd).then(function(r) {
       if (!r.ok) { msg('error', r.error || 'Error del servidor.'); MODO.aplicando = false; return; }
-      RESUMEN = null;
-      var resultados = r.resultados.map(function(g) {
+      r.resultados.forEach(function(g) {
         var it = null;
         lista.forEach(function(x) { if (x.codigo === g.codigo && !it) it = x; });
         var antes = it ? it.estado : '';
-        if (g.r.ok) return { codigo: g.codigo, ok: true, antes: antes, despues: g.r.keg.estado };
-        return { codigo: g.codigo, ok: false, antes: antes, estado: g.r.estado || '', texto: g.r.error };
+        if (g.r.ok) resultados.push({ codigo: g.codigo, ok: true, antes: antes, despues: g.r.keg.estado });
+        else resultados.push({ codigo: g.codigo, ok: false, antes: antes, estado: g.r.estado || '', texto: g.r.error });
       });
-      mostrarResultados(resultados);
+      idx += trozo.length;
+      mandar();
     }).catch(function(e) {
       msg('error', '⚠️ Sin conexión, reintentando…');
       setTimeout(mandar, 2500);
