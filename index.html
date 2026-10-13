@@ -422,6 +422,7 @@ function pintarItems() {
     if (it.estado && !it.error) {
       if (MODO.accion === 'ENTREGAR' && it.estado !== 'LLENO') warn = '⚠️ SIN CERVEZA — ';
       if (MODO.accion === 'RECOGER' && it.estado === 'LLENO') warn = '⚠️ FIGURA LLENO — ';
+      if (MODO.accion === 'LLENAR' && it.estado === 'LLENO') warn = '⚠️ FIGURA LLENO — ';
     }
     var det = it.estado === null ? '⏳ consultando estatus…'
       : (it.error ? esc(it.error)
@@ -471,6 +472,16 @@ function aplicarTanda() {
         MODO.items = MODO.items.filter(function(x) { return porLavar.indexOf(x.codigo) === -1; });
       }
     }
+    // cualquier otro estado (ej. LLENO): se llena igual si el operador lo confirma
+    var otrosL = MODO.items.filter(function(it) { return ['LIMPIO', 'VACIO', 'ENTREGADO', 'EVENTO', 'SUCIO'].indexOf(it.estado) === -1 && !it.devolver; });
+    if (otrosL.length) {
+      var txtL = otrosL.map(function(it) { return it.codigo + ' (' + it.estado + ')'; }).join(', ');
+      if (confirm('⚠️ Estos barriles NO están limpios:\n\n' + txtL + '\n\n¿Llenarlos igual?')) {
+        otrosL.forEach(function(it) { it.forzarLlenar = true; });
+      } else {
+        MODO.items = MODO.items.filter(function(x) { return otrosL.indexOf(x) === -1; });
+      }
+    }
     pintarItems();
     if (!MODO.items.length) { msg('info', 'No quedó ningún barril en la lista.'); return; }
   }
@@ -511,6 +522,7 @@ function aplicarTanda() {
     if (it.previas) o.previas = it.previas;
     if (MODO.accion === 'ENTREGAR' && it.estado !== 'LLENO') o.forzar = 1;
     if (MODO.accion === 'RECOGER' && it.estado === 'LLENO') o.forzar = 1;
+    if (MODO.accion === 'LLENAR' && it.forzarLlenar) o.forzar = 1;
     return o;
   }) };
   if (MODO.extra.producto)  d.producto  = MODO.extra.producto;
@@ -938,7 +950,7 @@ function pintarCarta() {
 }
 
 function bloqueada_(a, estado) {
-  if (a === 'LLENAR') return estado !== 'LIMPIO' && estado !== 'VACIO';
+  if (a === 'LLENAR') return false; // se llena en cualquier estado; si no esta limpio, se confirma al elegir
   if (a === 'ENTREGAR') return estado === 'ENTREGADO' || estado === 'EVENTO';
   if (a === 'RECOGER') return estado === 'SUCIO' || estado === 'LIMPIO' || estado === 'VACIO';
   if (a === 'LAVAR') return estado !== 'SUCIO' && estado !== 'LIMPIO' && estado !== 'VACIO';
@@ -976,6 +988,7 @@ function guardar(a) {
       d.correccion = 1;
     } else { alert('Elige el fermentador de origen, o el producto para corrección.'); return; }
     d.notas = document.getElementById('fNotasL').value.trim();
+    if (KEG.estado !== 'LIMPIO' && KEG.estado !== 'VACIO') d.forzar = 1; // ya confirmado al elegir la accion
   } else if (a === 'ENTREGAR') {
     d.cliente = document.getElementById('fCliente').value;
     d.ubicacion = document.getElementById('fUbicacion').value.trim();
