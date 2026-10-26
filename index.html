@@ -131,6 +131,7 @@
   <div class="contadores" style="margin-bottom:8px">
     <button id="vbBarriles" class="activa" onclick="ponerVistaKegs('barriles')">Barriles</button>
     <button id="vbInventario" onclick="ponerVistaKegs('inventario')">📊 Por producto</button>
+    <button id="vbClientes" onclick="ponerVistaKegs('clientes')">👥 Por cliente</button>
   </div>
   <div id="vistaBarriles">
     <div class="contadores" id="contadores"></div>
@@ -140,6 +141,13 @@
     </div>
   </div>
   <div id="vistaInventario" style="display:none"></div>
+  <div id="vistaClientes" style="display:none">
+    <div class="fila" style="margin-top:0">
+      <input id="filtroCli" placeholder="Buscar cliente" oninput="pintarClientes()" autocomplete="off">
+      <button class="btn gris" onclick="cargarResumen(true)">↻</button>
+    </div>
+    <div id="listaCli"></div>
+  </div>
   <div class="cargando" id="cargKegs">⏳ Cargando kegs…</div>
   <div id="lista"></div>
 </main>
@@ -1117,9 +1125,12 @@ function ponerVistaKegs(v) {
   VISTA_KEGS = v;
   document.getElementById('vbBarriles').classList.toggle('activa', v === 'barriles');
   document.getElementById('vbInventario').classList.toggle('activa', v === 'inventario');
+  document.getElementById('vbClientes').classList.toggle('activa', v === 'clientes');
   document.getElementById('vistaBarriles').style.display = (v === 'barriles') ? '' : 'none';
   document.getElementById('vistaInventario').style.display = (v === 'inventario') ? '' : 'none';
+  document.getElementById('vistaClientes').style.display = (v === 'clientes') ? '' : 'none';
   if (v === 'inventario') { document.getElementById('lista').innerHTML = ''; pintarInventario(); }
+  else if (v === 'clientes') { document.getElementById('lista').innerHTML = ''; CLIENTE_SEL = null; pintarClientes(); }
   else pintarLista();
 }
 function verProducto(p) {
@@ -1153,8 +1164,53 @@ function pintarInventario() {
   if (!productos.length) html += '<div class="cargando" style="display:block">Sin barriles con producto.</div>';
   document.getElementById('vistaInventario').innerHTML = html;
 }
+// vista por cliente: barriles que cada cliente tiene hoy (estado ENTREGADO)
+var CLIENTE_SEL = null;
+function verCliente(i) { CLIENTE_SEL = CLIENTES_VISTA[i]; pintarClientes(); window.scrollTo(0, 0); }
+function volverClientes() { CLIENTE_SEL = null; pintarClientes(); }
+var CLIENTES_VISTA = [];
+function pintarClientes() {
+  if (!RESUMEN) { cargarResumen(false); return; }
+  var por = {};
+  RESUMEN.forEach(function(k) {
+    if (k.estado !== 'ENTREGADO' || !k.cliente) return;
+    (por[k.cliente] = por[k.cliente] || []).push(k);
+  });
+  var html;
+  if (CLIENTE_SEL) {
+    var ks = (por[CLIENTE_SEL] || []).slice().sort(function(a, b) { return String(a.codigo).localeCompare(String(b.codigo), 'es', { numeric: true }); });
+    var litros = 0;
+    ks.forEach(function(k) { litros += Number(k.capacidad) || 0; });
+    html = '<button class="btn gris" style="width:100%;margin-bottom:10px" onclick="volverClientes()">← Todos los clientes</button>' +
+      '<div class="banner" style="margin-bottom:10px">👥 <b>' + esc(CLIENTE_SEL) + '</b>: ' + ks.length + ' barril(es) · ' + litros + ' L</div>';
+    html += ks.map(function(k) {
+      var det = k.capacidad + ' L';
+      if (k.producto) det += ' · ' + esc(k.producto) + (k.lote ? ' (' + esc(k.lote) + ')' : '');
+      if (k.ubicacion) det += '<br>📍 ' + esc(k.ubicacion);
+      if (k.ultMov) det += '<br>🕒 ' + esc(k.ultMov);
+      return '<div class="item" onclick="verKeg(\'' + esc(k.codigo) + '\')"><div class="cod">' + esc(k.codigo) + '</div><div class="det">' + det + '</div><span class="chip ' + esc(k.estado) + '">' + esc(k.estado) + '</span></div>';
+    }).join('') || '<div class="cargando" style="display:block">Este cliente no tiene barriles.</div>';
+    document.getElementById('filtroCli').parentNode.style.display = 'none';
+  } else {
+    var f = document.getElementById('filtroCli').value.trim().toLowerCase();
+    CLIENTES_VISTA = Object.keys(por).filter(function(c) { return !f || c.toLowerCase().indexOf(f) !== -1; })
+      .sort(function(a, b) { return por[b].length - por[a].length || a.localeCompare(b, 'es'); });
+    var tot = 0;
+    Object.keys(por).forEach(function(c) { tot += por[c].length; });
+    html = '<div class="banner" style="margin-bottom:10px">🔵 Con clientes: <b>' + tot + '</b> barril(es) en <b>' + Object.keys(por).length + '</b> cliente(s)</div>';
+    html += CLIENTES_VISTA.map(function(c, i) {
+      var prods = {};
+      por[c].forEach(function(k) { var p = k.producto || 'sin producto'; prods[p] = (prods[p] || 0) + 1; });
+      var det = Object.keys(prods).map(function(p) { return prods[p] + ' × ' + esc(p); }).join(' · ');
+      return '<div class="item" onclick="verCliente(' + i + ')"><div class="det"><b>' + esc(c) + '</b><br>' + det + '</div>' +
+        '<span class="chip ENTREGADO">' + por[c].length + '</span></div>';
+    }).join('') || '<div class="cargando" style="display:block">Sin resultados.</div>';
+    document.getElementById('filtroCli').parentNode.style.display = '';
+  }
+  document.getElementById('listaCli').innerHTML = html;
+}
 function cargarResumen(forzar) {
-  if (RESUMEN && !forzar) { (VISTA_KEGS === 'inventario') ? pintarInventario() : pintarLista(); return; }
+  if (RESUMEN && !forzar) { (VISTA_KEGS === 'inventario') ? pintarInventario() : (VISTA_KEGS === 'clientes') ? pintarClientes() : pintarLista(); return; }
   document.getElementById('cargKegs').style.display = 'block';
   document.getElementById('lista').innerHTML = '';
   api('kegEstados', {}).then(function(r) {
@@ -1164,7 +1220,7 @@ function cargarResumen(forzar) {
     try { localStorage.setItem('kegsEstados', JSON.stringify(r.estados)); } catch (e) {}
     RESUMEN = Object.keys(ESTADOS).map(function(c) { return ESTADOS[c]; });
     pintarContadores();
-    (VISTA_KEGS === 'inventario') ? pintarInventario() : pintarLista();
+    (VISTA_KEGS === 'inventario') ? pintarInventario() : (VISTA_KEGS === 'clientes') ? pintarClientes() : pintarLista();
   });
 }
 function pintarContadores() {
