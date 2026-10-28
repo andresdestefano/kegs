@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <title>Kegs Hammurabier</title>
 <!-- V28 2026-10-28: tandas que no se pierden (menu/cancelar/avisos), rechazados en rojo, estados refrescados en toda la lista, aviso de dato de julio -->
+<!-- V29 2026-10-28: el aviso de dato viejo ya no menciona tiempo: «dato sin confirmar en la app (viene del sistema viejo)» -->
 <style>
   :root {
     --ambar: #b8860b; --amber2: #8a6508; --fondo: #f6f3ee; --carta: #fff;
@@ -442,7 +443,7 @@ function pintarItems() {
     var det = it.estado === null ? '⏳ consultando estatus…'
       : (it.error ? esc(it.error)
         : warn + (it.detalle ? esc(it.detalle) : 'Estatus actual'));
-    if (it.estado && !it.error && ESTADOS && ESTADOS[it.codigo] && !ESTADOS[it.codigo].ultMov) det += '<br>⚠️ sin movimientos registrados desde julio: dato del sistema viejo';
+    if (it.estado && !it.error && ESTADOS && ESTADOS[it.codigo] && !ESTADOS[it.codigo].ultMov) det += '<br>⚠️ dato sin confirmar en la app (viene del sistema viejo)';
     var chip = it.estado ? '<span class="chip ' + esc(it.estado) + '">' + esc(it.estado) + '</span>' : '';
     var quitar = MODO.aplicando ? '' : '<button class="btn gris" style="padding:6px 10px" onclick="quitarItem(\'' + esc(it.codigo) + '\')">✕</button>';
     return '<div class="item' + (it.error ? ' malo' : '') + '"><div class="cod">' + esc(it.codigo) + '</div><div class="det">' + det + '</div>' + chip + quitar + '</div>';
@@ -920,7 +921,7 @@ function pintarCarta() {
   if (k.cliente) d.push('<b>Cliente:</b> ' + esc(k.cliente) + (k.ubicacion ? ' — ' + esc(k.ubicacion) : ''));
   else if (k.ubicacion) d.push('<b>Ubicación:</b> ' + esc(k.ubicacion));
   if (k.ultMov) d.push('<b>Últ. movimiento:</b> ' + esc(k.ultMov));
-  else d.push('⚠️ <b>Sin movimientos registrados desde julio:</b> lo que figura viene del sistema viejo y puede no ser real.');
+  else d.push('⚠️ <b>Dato sin confirmar en la app:</b> lo que figura viene del sistema viejo; se actualiza al cargar el barril.');
   var botones = ['LLENAR', 'ENTREGAR', 'RECOGER', 'LAVAR', 'DEPOSITO', 'EVENTO'].map(function(a) {
     var clase = (a === sug ? 'sugerida' : '') + (bloqueada_(a, k.estado) ? ' bloqueada' : '');
     return '<button class="' + clase + '" onclick="elegirAccion(\'' + a + '\')">' + NOMBRE_ACCION[a] + '</button>';
