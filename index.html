@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <title>Kegs Hammurabier</title>
+<!-- V28 2026-10-28: tandas que no se pierden (menu/cancelar/avisos), rechazados en rojo, estados refrescados en toda la lista, aviso de dato de julio -->
 <style>
   :root {
     --ambar: #b8860b; --amber2: #8a6508; --fondo: #f6f3ee; --carta: #fff;
@@ -243,6 +244,7 @@ function verTab(t) {
   document.getElementById('navKegs').classList.toggle('activa', t === 'kegs');
   document.getElementById('navFerm').classList.toggle('activa', t === 'ferm');
   if (t !== 'esc') cerrarCamara();
+  else if (MODO && !MODO.aplicando && !escaneando) abrirCamara(); // volver a la tanda en curso: camara otra vez
   if (t === 'kegs' && !RESUMEN) cargarResumen(false);
   if (t === 'ferm') pintarFerm();
 }
@@ -400,7 +402,12 @@ function pintarBannerModo() {
   var m = MODOS[MODO.accion];
   var det = MODO.extra._txt ? ' → <b>' + esc(MODO.extra._txt) + '</b>' : '';
   var n = MODO.accion === 'REVISAR' ? '' : ' · <b>' + MODO.items.length + '</b> barril(es)';
-  document.getElementById('banModo').innerHTML = m.ic + ' <b>' + m.nombre + '</b>' + det + n;
+  // edad del snapshot de estados: si no se pudo refrescar, el operador lo ve
+  var edad = ESTADOS_TS ? Math.round((Date.now() - ESTADOS_TS) / 60000) : -1;
+  var est = edad < 0 ? '<br>⚠️ <b>Estados sin actualizar</b> (sin conexión)'
+    : edad >= 10 ? '<br>⚠️ <b>Estados de hace ' + (edad >= 120 ? Math.round(edad / 60) + ' h' : edad + ' min') + '</b> (no se pudieron actualizar)'
+    : '';
+  document.getElementById('banModo').innerHTML = m.ic + ' <b>' + m.nombre + '</b>' + det + n + est;
 }
 
 function verboBoton() { return (MODO && VERBO_BOTON[MODO.accion]) || 'Guardar'; }
@@ -435,6 +442,7 @@ function pintarItems() {
     var det = it.estado === null ? '⏳ consultando estatus…'
       : (it.error ? esc(it.error)
         : warn + (it.detalle ? esc(it.detalle) : 'Estatus actual'));
+    if (it.estado && !it.error && ESTADOS && ESTADOS[it.codigo] && !ESTADOS[it.codigo].ultMov) det += '<br>⚠️ sin movimientos registrados desde julio: dato del sistema viejo';
     var chip = it.estado ? '<span class="chip ' + esc(it.estado) + '">' + esc(it.estado) + '</span>' : '';
     var quitar = MODO.aplicando ? '' : '<button class="btn gris" style="padding:6px 10px" onclick="quitarItem(\'' + esc(it.codigo) + '\')">✕</button>';
     return '<div class="item' + (it.error ? ' malo' : '') + '"><div class="cod">' + esc(it.codigo) + '</div><div class="det">' + det + '</div>' + chip + quitar + '</div>';
@@ -459,39 +467,37 @@ function aplicarTanda() {
     setTimeout(aplicarTanda, 800);
     return;
   }
+  // cada intento parte limpio: nada queda marcado de un intento anterior
+  MODO.items.forEach(function(it) { delete it.devolver; delete it.previas; delete it.forzarLlenar; });
+  // Si el operador cancela un aviso, NO se guarda nada y la lista queda intacta:
+  // antes se sacaban esos barriles de la tanda en silencio y el resto se guardaba igual (barriles "cargados" que nunca llegaron).
+  function nadaGuardado_(cods, otra) {
+    msg('error', '⛔ No se guardó nada. ' + otra + ' Quita con ✕ los barriles que no van (' + cods.join(', ') + ') o vuelve a tocar ' + verboBoton() + ' y acepta.');
+    pintarItems();
+  }
   // llenado en cascada: devolver y/o lavar con confirmacion antes de llenar
   if (MODO.accion === 'LLENAR') {
     var sinDevolver = MODO.items.filter(function(it) { return it.estado === 'ENTREGADO' || it.estado === 'EVENTO'; }).map(function(it) { return it.codigo; });
     if (sinDevolver.length) {
-      if (confirm('Estos barriles estaban SIN DEVOLVER:\n\n' + sinDevolver.join(', ') + '\n\n¿Los devolvemos ahora para poder llenarlos?')) {
-        MODO.items.forEach(function(it) { if (sinDevolver.indexOf(it.codigo) !== -1) it.devolver = true; });
-      } else {
-        MODO.items = MODO.items.filter(function(x) { return sinDevolver.indexOf(x.codigo) === -1; });
-      }
+      if (!confirm('Estos barriles figuran SIN DEVOLVER:\n\n' + sinDevolver.join(', ') + '\n\n¿Los devolvemos ahora para poder llenarlos?\n\n(Cancelar = no se guarda NADA de la tanda)')) { nadaGuardado_(sinDevolver, 'Esos barriles figuran sin devolver.'); return; }
+      MODO.items.forEach(function(it) { if (sinDevolver.indexOf(it.codigo) !== -1) it.devolver = true; });
     }
     var porLavar = MODO.items.filter(function(it) { return it.estado === 'SUCIO' || it.devolver; }).map(function(it) { return it.codigo; });
     if (porLavar.length) {
-      if (confirm('Estos barriles están (o quedarán) SUCIOS:\n\n' + porLavar.join(', ') + '\n\n¿Ya se lavaron?')) {
-        MODO.items.forEach(function(it) {
-          if (it.devolver) it.previas = ['RECOGER', 'LAVAR'];
-          else if (it.estado === 'SUCIO') it.previas = ['LAVAR'];
-        });
-      } else {
-        MODO.items = MODO.items.filter(function(x) { return porLavar.indexOf(x.codigo) === -1; });
-      }
+      if (!confirm('Estos barriles figuran (o quedarán) SUCIOS:\n\n' + porLavar.join(', ') + '\n\n¿Ya se lavaron?\n\n(Cancelar = no se guarda NADA de la tanda)')) { nadaGuardado_(porLavar, 'Esos barriles figuran sucios.'); return; }
+      MODO.items.forEach(function(it) {
+        if (it.devolver) it.previas = ['RECOGER', 'LAVAR'];
+        else if (it.estado === 'SUCIO') it.previas = ['LAVAR'];
+      });
     }
     // cualquier otro estado (ej. LLENO): se llena igual si el operador lo confirma
     var otrosL = MODO.items.filter(function(it) { return ['LIMPIO', 'VACIO', 'ENTREGADO', 'EVENTO', 'SUCIO'].indexOf(it.estado) === -1 && !it.devolver; });
     if (otrosL.length) {
       var txtL = otrosL.map(function(it) { return it.codigo + ' (' + it.estado + ')'; }).join(', ');
-      if (confirm('⚠️ Estos barriles NO están limpios:\n\n' + txtL + '\n\n¿Llenarlos igual?')) {
-        otrosL.forEach(function(it) { it.forzarLlenar = true; });
-      } else {
-        MODO.items = MODO.items.filter(function(x) { return otrosL.indexOf(x) === -1; });
-      }
+      if (!confirm('⚠️ Estos barriles figuran con otro contenido (dato viejo o ya llenos):\n\n' + txtL + '\n\n¿Llenarlos igual con lo elegido?\n\n(Cancelar = no se guarda NADA de la tanda)')) { nadaGuardado_(otrosL.map(function(it) { return it.codigo; }), 'Esos barriles figuran con otro contenido.'); return; }
+      otrosL.forEach(function(it) { it.forzarLlenar = true; });
     }
     pintarItems();
-    if (!MODO.items.length) { msg('info', 'No quedó ningún barril en la lista.'); return; }
   }
   // barriles sin cerveza al ENTREGAR: gran advertencia y doble confirmacion
   if (MODO.accion === 'ENTREGAR') {
@@ -507,17 +513,14 @@ function aplicarTanda() {
       }
     }
   }
-  // devolver barriles que figuran LLENO: confirmar UNO POR UNO; el rechazado se quita de la tanda
+  // devolver barriles que figuran LLENO: confirmar UNO POR UNO; si se cancela uno, no se guarda nada
   if (MODO.accion === 'RECOGER') {
     var llenos = MODO.items.filter(function(it) { return it.estado === 'LLENO'; });
     for (var li = 0; li < llenos.length; li++) {
       var itL = llenos[li];
-      if (!confirm('⚠️ ' + itL.codigo + ' figura LLENO en el sistema.\n\n¿Devolverlo igual? (quedará SUCIO)')) {
-        MODO.items = MODO.items.filter(function(x) { return x !== itL; });
-      }
+      if (!confirm('⚠️ ' + itL.codigo + ' figura LLENO en el sistema.\n\n¿Devolverlo igual? (quedará SUCIO)\n\n(Cancelar = no se guarda NADA de la tanda)')) { nadaGuardado_([itL.codigo], itL.codigo + ' figura lleno.'); return; }
     }
     pintarItems();
-    if (!MODO.items.length) { msg('info', 'No quedó ningún barril en la lista.'); return; }
   }
   MODO.aplicando = true;
   cerrarCamara();
@@ -580,6 +583,13 @@ function mostrarResultados(resultados) {
   msg(); msgHome();
   document.getElementById('items').innerHTML = '';
   vista('modos');
+  // los rechazados van primero y con aviso en rojo: un ⛔ perdido al final de una lista larga era una carga "hecha" que no existia
+  resultados = resultados.filter(function(g) { return !g.ok; }).concat(resultados.filter(function(g) { return g.ok; }));
+  var avisoMal = malN
+    ? '<div class="aviso error" style="display:block;margin:8px 0">⛔ <b>' + malN + ' barril(es) NO se guardaron:</b> ' +
+      resultados.filter(function(g) { return !g.ok; }).map(function(g) { return esc(g.codigo) + (g.estado ? ' (figura ' + esc(g.estado) + ')' : (g.texto ? ' (' + esc(g.texto) + ')' : '')); }).join(', ') +
+      '.<br>Revísalos y vuelve a escanearlos.</div>'
+    : '';
   var filas = resultados.map(function(g) {
     var res = g.ok
       ? '✅ <span class="chip ' + esc(g.antes) + '">' + esc(g.antes) + '</span> → <span class="chip ' + esc(g.despues) + '">' + esc(g.despues) + '</span>'
@@ -589,18 +599,20 @@ function mostrarResultados(resultados) {
   }).join('');
   document.getElementById('vModos').style.display = 'none';
   document.getElementById('card').innerHTML =
-    '<div class="carta"><h2 style="font-size:18px">' + MODOS[a].ic + ' ' + esc(MODOS[a].nombre) + ' — cambios guardados</h2>' +
-    '<div class="datos"><b>' + okN + '</b> guardado(s)' + (malN ? ' · <b>' + malN + '</b> rechazado(s)' : '') + '</div>' +
+    '<div class="carta"><h2 style="font-size:18px">' + MODOS[a].ic + ' ' + esc(MODOS[a].nombre) + (okN ? ' — cambios guardados' : ' — NADA guardado') + '</h2>' +
+    '<div class="datos"><b>' + okN + '</b> guardado(s)' + (malN ? ' · <b>' + malN + '</b> rechazado(s)' : '') + '</div>' + avisoMal +
     '<table style="width:100%;border-collapse:collapse;margin-top:8px;font-size:14px">' + filas + '</table>' +
     '<div class="fila"><button class="btn" style="flex:1" onclick="cerrarResumen()">OK</button></div></div>';
 }
 
-function cancelarTanda() {
-  if (MODO && MODO.items.length && !MODO.aplicando) {
-    if (!confirm('Hay ' + MODO.items.length + ' barril(es) sin guardar. ¿Salir sin guardar?')) return;
-  }
-  volverAlMenu();
+// unica puerta de salida de una tanda: con barriles sin guardar pregunta; mientras guarda, no deja salir
+function salirDeTanda_() {
+  if (!MODO) return true;
+  if (MODO.aplicando) { msg('info', '⏳ Espera: se están guardando los barriles.'); return false; }
+  if (MODO.items.length && !confirm('Hay ' + MODO.items.length + ' barril(es) escaneados SIN GUARDAR.\n\n¿Salir sin guardar? Se pierden.')) return false;
+  return true;
 }
+function cancelarTanda() { volverAlMenu(); }
 
 function cerrarResumen() {
   document.getElementById('card').innerHTML = '';
@@ -667,25 +679,31 @@ function consultarCola() {
 }
 
 // snapshot de estados: guardado en el telefono y refrescado por detras -> todo sale al instante
-var ESTADOS = null;
-try { ESTADOS = JSON.parse(localStorage.getItem('kegsEstados') || 'null'); } catch (e) {}
+var ESTADOS = null, ESTADOS_TS = 0;
+try { ESTADOS = JSON.parse(localStorage.getItem('kegsEstados') || 'null'); ESTADOS_TS = Number(localStorage.getItem('kegsEstadosTs')) || 0; } catch (e) {}
 var _k0 = ESTADOS && Object.keys(ESTADOS)[0];
 if (_k0 && !ESTADOS[_k0].codigo) ESTADOS = null; // cache de una version vieja de la app
 if (ESTADOS) RESUMEN = Object.keys(ESTADOS).map(function(c) { return ESTADOS[c]; });
+var ESTADOS_REINTENTO = null;
 function cargarEstados() {
+  if (ESTADOS_REINTENTO) { clearTimeout(ESTADOS_REINTENTO); ESTADOS_REINTENTO = null; }
   api('kegEstados', {}).then(function(r) {
-    if (!r.ok) return;
+    if (!r.ok) throw new Error(r.error || 'kegEstados');
     ESTADOS = r.estados;
-    try { localStorage.setItem('kegsEstados', JSON.stringify(r.estados)); } catch (e) {}
+    ESTADOS_TS = Date.now();
+    try { localStorage.setItem('kegsEstados', JSON.stringify(r.estados)); localStorage.setItem('kegsEstadosTs', String(ESTADOS_TS)); } catch (e) {}
     RESUMEN = Object.keys(ESTADOS).map(function(c) { return ESTADOS[c]; });
     if (MODO) {
-      var hubo = false;
+      // se actualizan TODOS los barriles ya escaneados: antes solo se completaban los que faltaban y los demas quedaban con el dato viejo del telefono
       MODO.items.forEach(function(it) {
-        if (it.estado === null && ESTADOS[it.codigo]) { it.estado = ESTADOS[it.codigo].estado; it.detalle = ESTADOS[it.codigo].detalle; hubo = true; }
+        if (!it.error && ESTADOS[it.codigo]) { it.estado = ESTADOS[it.codigo].estado; it.detalle = ESTADOS[it.codigo].detalle; }
       });
-      if (hubo) pintarItems();
+      pintarItems();
     }
-  }).catch(function() {});
+  }).catch(function() {
+    // sin conexion: el banner avisa que los estados son viejos y se reintenta mientras dure la tanda
+    if (MODO) { pintarBannerModo(); ESTADOS_REINTENTO = setTimeout(cargarEstados, 5000); }
+  });
 }
 cargarEstados();
 
@@ -847,7 +865,7 @@ async function loopEscaneo() {
 
 // ========== ficha de un keg (toque en la lista o enlace ?codigo=) ==========
 function verKeg(texto) {
-  terminarSiActivo_();
+  if (!terminarSiActivo_()) return;
   verTab('esc');
   var cod = extraerCodigo(texto);
   if (cod && ESTADOS && ESTADOS[cod] && ESTADOS[cod].codigo) {
@@ -873,13 +891,17 @@ function verKeg(texto) {
   });
 }
 function terminarSiActivo_() {
+  if (!salirDeTanda_()) return false;
   if (MODO) { MODO = null; cerrarCamara(); msg(); vista('modos'); }
+  return true;
 }
 
-// volver al menu principal desde cualquier lado (titulo de la app)
+// volver al menu principal desde cualquier lado (titulo de la app); con tanda sin guardar, pregunta
 function volverAlMenu() {
+  if (!salirDeTanda_()) return;
   MODO = null;
   LCOLA = [];
+  if (ESTADOS_REINTENTO) { clearTimeout(ESTADOS_REINTENTO); ESTADOS_REINTENTO = null; }
   cerrarCamara();
   msg(); msgHome();
   document.getElementById('card').innerHTML = '';
@@ -898,6 +920,7 @@ function pintarCarta() {
   if (k.cliente) d.push('<b>Cliente:</b> ' + esc(k.cliente) + (k.ubicacion ? ' — ' + esc(k.ubicacion) : ''));
   else if (k.ubicacion) d.push('<b>Ubicación:</b> ' + esc(k.ubicacion));
   if (k.ultMov) d.push('<b>Últ. movimiento:</b> ' + esc(k.ultMov));
+  else d.push('⚠️ <b>Sin movimientos registrados desde julio:</b> lo que figura viene del sistema viejo y puede no ser real.');
   var botones = ['LLENAR', 'ENTREGAR', 'RECOGER', 'LAVAR', 'DEPOSITO', 'EVENTO'].map(function(a) {
     var clase = (a === sug ? 'sugerida' : '') + (bloqueada_(a, k.estado) ? ' bloqueada' : '');
     return '<button class="' + clase + '" onclick="elegirAccion(\'' + a + '\')">' + NOMBRE_ACCION[a] + '</button>';
