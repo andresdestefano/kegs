@@ -610,7 +610,7 @@ function mostrarResultados(resultados) {
 function salirDeTanda_() {
   if (!MODO) return true;
   if (MODO.aplicando) { msg('info', '⏳ Espera: se están guardando los barriles.'); return false; }
-  if (MODO.items.length && !confirm('Hay ' + MODO.items.length + ' barril(es) escaneados SIN GUARDAR.\n\n¿Salir sin guardar? Se pierden.')) return false;
+  if (MODO.items.length && MODO.accion !== 'REVISAR' && !confirm('Hay ' + MODO.items.length + ' barril(es) escaneados SIN GUARDAR.\n\n¿Salir sin guardar? Se pierden.')) return false;
   return true;
 }
 function cancelarTanda() { volverAlMenu(); }
